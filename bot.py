@@ -5,7 +5,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 import os
 from aiogram import Bot
 
-bot = Bot(token=os.getenv("BOT_TOKEN"))
+import os
+
+TOKEN = os.environ["TOKEN"]
+
+bot = Bot(token=TOKEN)
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds",
