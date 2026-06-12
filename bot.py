@@ -2,7 +2,10 @@ from aiogram import Bot, Dispatcher, types, executor
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-TOKEN = "8656470347:AAHSiEAne8KYH_Klbd7HnYmxxGlTW2NBFgA"
+import os
+from aiogram import Bot
+
+bot = Bot(token=os.getenv("BOT_TOKEN"))
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds",
