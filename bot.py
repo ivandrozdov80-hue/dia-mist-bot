@@ -25,26 +25,17 @@ logging.basicConfig(level=logging.INFO)
 # ======================
 
 TOKEN = os.environ["TOKEN"]
-
-WEBHOOK_HOST = os.environ.get("WEBHOOK_HOST", "").strip()
-WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/webhook")
-
-if not WEBHOOK_HOST.startswith("https://"):
-    raise ValueError("WEBHOOK_HOST must start with https://")
-
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 
 # ======================
-# BOT
+# BOT INIT (NO WEBHOOK!)
 # ======================
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 # ======================
-# SHEETS
+# GOOGLE SHEETS
 # ======================
 
 scope = [
@@ -53,7 +44,11 @@ scope = [
 ]
 
 creds_dict = json.loads(os.environ["GOOGLE_CREDS"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    creds_dict,
+    scope
+)
 
 client = gspread.authorize(creds)
 sheet = client.open("DIA.MIST CRM").sheet1
@@ -98,7 +93,7 @@ async def name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await Form.phone.set()
 
-    await message.answer("📱 Отправь номер", reply_markup=phone_kb)
+    await message.answer("📱 Отправь номер телефона", reply_markup=phone_kb)
 
 # ======================
 # PHONE
@@ -121,7 +116,7 @@ async def phone_fallback(message: types.Message):
     await message.answer("Используй кнопку 📱")
 
 # ======================
-# BIRTHDAY + SAVE
+# BIRTHDAY + SAVE USER
 # ======================
 
 @dp.message_handler(state=Form.birthday)
@@ -156,10 +151,10 @@ async def birthday(message: types.Message, state: FSMContext):
     await message.answer("🎉 Готово! Добро пожаловать", reply_markup=main_kb)
 
 # ======================
-# 🔥 АКЦИИ
+# 🎁 АКЦИИ
 # ======================
 
-@dp.message_handler(lambda m: m.text == "🎁 Акции", state="*")
+@dp.message_handler(lambda m: m.text == "🎁 Акции")
 async def promo(message: types.Message):
     await message.answer(
         "🔥 АКЦИЯ КАЛЬЯННОЙ\n\n"
@@ -167,10 +162,10 @@ async def promo(message: types.Message):
     )
 
 # ======================
-# ⭐ КАЛЬЯНЫ
+# ⭐ МОИ КАЛЬЯНЫ
 # ======================
 
-@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны", state="*")
+@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны")
 async def my_hookahs(message: types.Message):
 
     records = sheet.get_all_records()
@@ -190,7 +185,7 @@ async def my_hookahs(message: types.Message):
     await message.answer("У тебя пока нет посещений")
 
 # ======================
-# ➕ АДМИН
+# ➕ АДМИН ДОБАВИТЬ КАЛЬЯН
 # ======================
 
 @dp.message_handler(commands=["addhookah"])
@@ -202,7 +197,7 @@ async def add_hookah(message: types.Message):
     try:
         _, user_id = message.text.split()
     except:
-        await message.answer("Формат: /addhookah ID")
+        await message.answer("Формат: /addhookah USER_ID")
         return
 
     records = sheet.get_all_records()
@@ -224,27 +219,8 @@ async def add_hookah(message: types.Message):
     await message.answer("Не найден")
 
 # ======================
-# WEBHOOK
-# ======================
-
-async def on_startup(dp):
-    logging.info(f"Webhook: {WEBHOOK_URL}")
-    await bot.set_webhook(WEBHOOK_URL)
-
-async def on_shutdown(dp):
-    await bot.delete_webhook()
-
-# ======================
-# RUN
+# RUN (POLLING - СТАБИЛЬНО)
 # ======================
 
 if __name__ == "__main__":
-    executor.start_webhook(
-        dispatcher=dp,
-        webhook_path=WEBHOOK_PATH,
-        on_startup=on_startup,
-        on_shutdown=on_shutdown,
-        skip_updates=True,
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000))
-    )
+    executor.start_polling(dp, skip_updates=True)
