@@ -1,14 +1,15 @@
 from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove
+)
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
-
-from aiohttp import web
-import threading
 
 # ======================
 # TELEGRAM
@@ -45,7 +46,7 @@ sheet = client.open("DIA.MIST CRM").sheet1
 user_data = {}
 
 # ======================
-# KEYBOARD
+# PHONE BUTTON
 # ======================
 
 phone_keyboard = ReplyKeyboardMarkup(
@@ -61,7 +62,23 @@ phone_button = KeyboardButton(
 phone_keyboard.add(phone_button)
 
 # ======================
-# BOT HANDLERS
+# MAIN MENU
+# ======================
+
+main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
+
+main_menu.row(
+    "🎁 Акции",
+    "🏆 Розыгрыш недели"
+)
+
+main_menu.row(
+    "⭐ Мои посещения",
+    "📍 Контакты"
+)
+
+# ======================
+# START
 # ======================
 
 @dp.message_handler(commands=["start"])
@@ -75,12 +92,17 @@ async def start(message: types.Message):
     }
 
     await message.answer(
-        "💨 Приветсвую тебя в DIA.MIST!\n\n"
+        "💨 Приветствую тебя в DIA.MIST!\n\n"
         "🎁 Участвуй в еженедельных розыгрышах\n"
         "⭐ Копи посещения\n"
-        "🔥 Получай бонусы и подарки\n\n"
-        "Напиши своё имя 👇"
+        "🔥 Получай бонусы и подарки\n"
+        "🎂 Получай подарок на день рождения\n\n"
+        "Для участия напиши своё имя 👇"
     )
+
+# ======================
+# CONTACT
+# ======================
 
 @dp.message_handler(content_types=['contact'])
 async def contact_handler(message: types.Message):
@@ -93,9 +115,59 @@ async def contact_handler(message: types.Message):
     user_data[user_id]["phone"] = message.contact.phone_number
 
     await message.answer(
-        "🎂 Когда у тебя день рождения? (пример: 15.08)",
+        "🎂 Когда у тебя день рождения?\n\n"
+        "Например: 15.08",
         reply_markup=ReplyKeyboardRemove()
     )
+
+# ======================
+# MENU BUTTONS
+# ======================
+
+@dp.message_handler(lambda message: message.text == "🎁 Акции")
+async def promotions(message: types.Message):
+
+    await message.answer(
+        "🔥 АКЦИЯ НЕДЕЛИ\n\n"
+        "Закажи 2 кальяна и получи чайник чая бесплатно ☕"
+    )
+
+
+@dp.message_handler(lambda message: message.text == "🏆 Розыгрыш недели")
+async def giveaway(message: types.Message):
+
+    await message.answer(
+        "🏆 РОЗЫГРЫШ НЕДЕЛИ\n\n"
+        "🎁 Приз: бесплатный кальян\n\n"
+        "Победитель будет выбран случайным образом в воскресенье."
+    )
+
+
+@dp.message_handler(lambda message: message.text == "⭐ Мои посещения")
+async def visits(message: types.Message):
+
+    await message.answer(
+        "⭐ Твои посещения\n\n"
+        "Пока посещений: 0\n\n"
+        "До бесплатного кальяна осталось 6 посещений 🔥"
+    )
+
+
+@dp.message_handler(lambda message: message.text == "📍 Контакты")
+async def contacts(message: types.Message):
+
+    await message.answer(
+        "📍 DIA.MIST\n\n"
+        "Укажи здесь свой адрес\n\n"
+        "🕐 Режим работы:\n"
+        "12:00 - 23:00\n\n"
+        "📞 Телефон:\n"
+        "+XXXXXXXXXXX"
+    )
+
+# ======================
+# TEXT HANDLER (REGISTRATION)
+# ======================
 
 @dp.message_handler(content_types=types.ContentTypes.TEXT)
 async def handler(message: types.Message):
@@ -107,20 +179,22 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # NAME
+    # имя
     if "name" not in data:
+
         data["name"] = message.text
 
         await message.answer(
-            "📱 Отправь номер телефона кнопкой ниже",
+            "📱 Нажми кнопку ниже и поделись номером телефона",
             reply_markup=phone_keyboard
         )
         return
 
+    # ждём телефон
     if "phone" not in data:
         return
 
-    # BIRTHDAY
+    # день рождения
     if "birthday" not in data:
 
         data["birthday"] = message.text
@@ -139,36 +213,24 @@ async def handler(message: types.Message):
         ])
 
         await message.answer(
-            "🎉 Регистрация завершена!",
-            reply_markup=ReplyKeyboardRemove()
+            "🎉 Регистрация завершена!\n\n"
+            "Добро пожаловать в DIA.MIST Club 💨\n\n"
+            "Теперь тебе доступны все возможности клуба 👇",
+            reply_markup=main_menu
         )
 
         user_data.pop(user_id)
 
 # ======================
-# WEB SERVER (ВАЖНО ДЛЯ RENDER)
+# START BOT (FIX FOR RENDER)
 # ======================
 
-async def handle(request):
-    return web.Response(text="Bot is running ✅")
-
-def run_web():
-    app = web.Application()
-    app.router.add_get("/", handle)
-    return app
-
-def start_web():
-    port = int(os.environ.get("PORT", 10000))
-    web.run_app(run_web(), host="0.0.0.0", port=port)
-
-# ======================
-# START BOTH (BOT + WEB)
-# ======================
+async def on_startup(dp):
+    await bot.delete_webhook(drop_pending_updates=True)
 
 if __name__ == "__main__":
-
-    # запускаем web сервер в отдельном потоке
-    threading.Thread(target=start_web, daemon=True).start()
-
-    # запускаем бот
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(
+        dp,
+        skip_updates=True,
+        on_startup=on_startup
+    )
