@@ -6,6 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
+import asyncio
 
 # ======================
 # BOT
@@ -15,6 +16,13 @@ TOKEN = os.environ["TOKEN"]
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
+
+# ======================
+# RESET WEBHOOK (ВАЖНО)
+# ======================
+
+async def on_startup(_):
+    await bot.delete_webhook(drop_pending_updates=True)
 
 # ======================
 # GOOGLE SHEETS
@@ -53,48 +61,23 @@ main_menu.row("🎁 Акции", "🏆 Розыгрыш")
 main_menu.row("⭐ Мои посещения", "📍 Контакты")
 
 # ======================
-# START (QR SYSTEM)
+# START
 # ======================
 
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
 
     user_id = message.from_user.id
-    args = message.get_args()
 
-    user_data.setdefault(user_id, {
+    user_data[user_id] = {
         "telegram_id": user_id,
         "username": message.from_user.username
-    })
+    }
 
-    if args and args.startswith("visit_"):
-
-        target_id = args.replace("visit_", "")
-
-        data = sheet.get_all_records()
-
-        for i, row in enumerate(data, start=2):
-
-            if str(row.get("telegram_id")) == str(target_id):
-
-                visits = int(row.get("visits", 0)) + 1
-                sheet.update_cell(i, 6, visits)
-
-                if visits >= 6:
-                    sheet.update_cell(i, 7, int(row.get("free_hookah", 0)) + 1)
-
-                    await bot.send_message(
-                        target_id,
-                        "🔥 Бесплатный кальян!"
-                    )
-
-                await message.answer(f"⭐ Визит засчитан: {visits}/6")
-                return
-
-        await message.answer("❌ Пользователь не найден")
-        return
-
-    await message.answer("💨 DIA.MIST\n\nНапиши имя 👇")
+    await message.answer(
+        "💨 DIA.MIST\n\n"
+        "Напиши своё имя 👇"
+    )
 
 # ======================
 # CONTACT
@@ -111,12 +94,12 @@ async def contact(message: types.Message):
     user_data[user_id]["phone"] = message.contact.phone_number
 
     await message.answer(
-        "🎂 Дата рождения?",
+        "🎂 Теперь отправь дату рождения (дд.мм)",
         reply_markup=ReplyKeyboardRemove()
     )
 
 # ======================
-# REGISTRATION
+# TEXT FLOW
 # ======================
 
 @dp.message_handler(content_types=types.ContentTypes.TEXT)
@@ -129,18 +112,21 @@ async def text(message: types.Message):
 
     data = user_data[user_id]
 
+    # NAME
     if "name" not in data:
         data["name"] = message.text
 
         await message.answer(
-            "📱 Отправь номер",
+            "📱 Нажми кнопку и отправь номер",
             reply_markup=phone_keyboard
         )
         return
 
+    # WAIT PHONE
     if "phone" not in data:
         return
 
+    # BIRTHDAY
     if "birthday" not in data:
 
         data["birthday"] = message.text
@@ -152,21 +138,62 @@ async def text(message: types.Message):
             data["name"],
             data["phone"],
             data["birthday"],
-            0,
-            0,
+            0,  # visits
+            0,  # free hookah
             reg
         ])
 
         await message.answer(
-            "🎉 Готово!",
+            "🎉 Готово!\n\n"
+            "Ты в DIA.MIST Club 🔥",
             reply_markup=main_menu
         )
 
         user_data.pop(user_id)
 
 # ======================
-# RUN (ВАЖНО ДЛЯ RENDER)
+# ADMIN: ADD VISIT
+# ======================
+
+@dp.message_handler(commands=["visit"])
+async def visit(message: types.Message):
+
+    if not message.reply_to_message:
+        await message.answer("❌ Ответь на клиента и напиши /visit")
+        return
+
+    target_id = message.reply_to_message.from_user.id
+
+    data = sheet.get_all_records()
+
+    for i, row in enumerate(data, start=2):
+
+        if str(row.get("telegram_id")) == str(target_id):
+
+            visits = int(row.get("visits", 0)) + 1
+            sheet.update_cell(i, 6, visits)
+
+            await message.answer(f"⭐ Визит: {visits}/6")
+
+            if visits >= 6:
+                sheet.update_cell(i, 7, int(row.get("free_hookah", 0)) + 1)
+
+                await bot.send_message(
+                    target_id,
+                    "🔥 Бесплатный кальян!"
+                )
+
+            return
+
+    await message.answer("❌ Не найден")
+
+# ======================
+# RUN
 # ======================
 
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(
+        dp,
+        skip_updates=True,
+        on_startup=on_startup
+    )
