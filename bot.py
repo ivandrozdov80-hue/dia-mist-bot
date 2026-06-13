@@ -41,11 +41,10 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 # ======================
 
 bot = Bot(token=TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+dp = Dispatcher(bot, storage=MemoryStorage())
 
 # ======================
-# GOOGLE SHEETS
+# SHEETS
 # ======================
 
 scope = [
@@ -54,7 +53,6 @@ scope = [
 ]
 
 creds_dict = json.loads(os.environ["GOOGLE_CREDS"])
-
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
 client = gspread.authorize(creds)
@@ -64,11 +62,11 @@ sheet = client.open("DIA.MIST CRM").sheet1
 # KEYBOARDS
 # ======================
 
-phone_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-phone_keyboard.add(KeyboardButton("📱 Отправить номер", request_contact=True))
+phone_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+phone_kb.add(KeyboardButton("📱 Отправить номер", request_contact=True))
 
-main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
-main_menu.row("🎁 Акции", "⭐ Мои кальяны")
+main_kb = ReplyKeyboardMarkup(resize_keyboard=True)
+main_kb.row("🎁 Акции", "⭐ Мои кальяны")
 
 # ======================
 # FSM
@@ -86,25 +84,28 @@ class Form(StatesGroup):
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
     await Form.name.set()
-    await message.answer("💨 DIA.MIST\n\nНапиши своё имя 👇", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "💨 DIA.MIST\n\nНапиши своё имя 👇",
+        reply_markup=ReplyKeyboardRemove()
+    )
 
 # ======================
 # NAME
 # ======================
 
 @dp.message_handler(state=Form.name)
-async def get_name(message: types.Message, state: FSMContext):
+async def name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await Form.phone.set()
 
-    await message.answer("📱 Отправь номер телефона", reply_markup=phone_keyboard)
+    await message.answer("📱 Отправь номер", reply_markup=phone_kb)
 
 # ======================
 # PHONE
 # ======================
 
 @dp.message_handler(content_types=types.ContentTypes.CONTACT, state=Form.phone)
-async def get_contact(message: types.Message, state: FSMContext):
+async def phone(message: types.Message, state: FSMContext):
 
     if not message.contact:
         await message.answer("Нажми кнопку 📱")
@@ -113,18 +114,18 @@ async def get_contact(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.contact.phone_number)
     await Form.birthday.set()
 
-    await message.answer("🎂 Введи дату рождения (ДД.ММ.ГГГГ)", reply_markup=ReplyKeyboardRemove())
+    await message.answer("🎂 Дата рождения (ДД.ММ.ГГГГ)", reply_markup=ReplyKeyboardRemove())
 
 @dp.message_handler(state=Form.phone)
 async def phone_fallback(message: types.Message):
     await message.answer("Используй кнопку 📱")
 
 # ======================
-# BIRTHDAY + SAVE USER
+# BIRTHDAY + SAVE
 # ======================
 
 @dp.message_handler(state=Form.birthday)
-async def get_birthday(message: types.Message, state: FSMContext):
+async def birthday(message: types.Message, state: FSMContext):
 
     try:
         datetime.strptime(message.text, "%d.%m.%Y")
@@ -141,61 +142,55 @@ async def get_birthday(message: types.Message, state: FSMContext):
             data["name"],
             data["phone"],
             message.text,
-            1,  # hookah_count
-            0,  # bonus_used
+            1,   # hookah_count
+            0,   # bonus_used
             datetime.now().strftime("%d.%m.%Y %H:%M")
         ])
     except Exception as e:
         logging.error(e)
-        await message.answer("❌ Ошибка сохранения")
+        await message.answer("❌ Ошибка базы данных")
         await state.finish()
         return
 
-    await message.answer("🎉 Готово! Ты зарегистрирован", reply_markup=main_menu)
     await state.finish()
+    await message.answer("🎉 Готово! Добро пожаловать", reply_markup=main_kb)
 
 # ======================
-# 🎁 АКЦИИ
+# 🔥 АКЦИИ
 # ======================
 
-@dp.message_handler(lambda m: m.text == "🎁 Акции")
+@dp.message_handler(lambda m: m.text == "🎁 Акции", state="*")
 async def promo(message: types.Message):
     await message.answer(
         "🔥 АКЦИЯ КАЛЬЯННОЙ\n\n"
-        "7-й кальян — БЕСПЛАТНО 🎁\n\n"
-        "Каждое посещение копит прогресс"
+        "7-й кальян — БЕСПЛАТНО 🎁"
     )
 
 # ======================
-# ⭐ МОИ КАЛЬЯНЫ
+# ⭐ КАЛЬЯНЫ
 # ======================
 
-@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны")
+@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны", state="*")
 async def my_hookahs(message: types.Message):
 
     records = sheet.get_all_records()
 
-    user = None
-
     for r in records:
         if str(r["telegram_id"]) == str(message.from_user.id):
-            user = r
-            break
 
-    if not user:
-        await message.answer("У тебя пока нет посещений")
-        return
+            count = int(r.get("hookah_count", 0))
+            remaining = 7 - (count % 7)
 
-    count = int(user.get("hookah_count", 0))
-    remaining = 7 - (count % 7)
+            await message.answer(
+                f"⭐ Кальяны: {count}\n"
+                f"🎯 До бонуса: {remaining}"
+            )
+            return
 
-    await message.answer(
-        f"⭐ Твои кальяны: {count}\n"
-        f"🎯 До бесплатного: {remaining}"
-    )
+    await message.answer("У тебя пока нет посещений")
 
 # ======================
-# ➕ АДМИН ДОБАВИТЬ КАЛЬЯН
+# ➕ АДМИН
 # ======================
 
 @dp.message_handler(commands=["addhookah"])
@@ -207,7 +202,7 @@ async def add_hookah(message: types.Message):
     try:
         _, user_id = message.text.split()
     except:
-        await message.answer("Формат: /addhookah USER_ID")
+        await message.answer("Формат: /addhookah ID")
         return
 
     records = sheet.get_all_records()
@@ -226,7 +221,7 @@ async def add_hookah(message: types.Message):
 
             return
 
-    await message.answer("Пользователь не найден")
+    await message.answer("Не найден")
 
 # ======================
 # WEBHOOK
