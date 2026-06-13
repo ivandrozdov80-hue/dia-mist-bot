@@ -46,7 +46,7 @@ sheet = client.open("DIA.MIST CRM").sheet1
 user_data = {}
 
 # ======================
-# BUTTON PHONE
+# PHONE BUTTON
 # ======================
 
 phone_keyboard = ReplyKeyboardMarkup(
@@ -60,6 +60,22 @@ phone_button = KeyboardButton(
 )
 
 phone_keyboard.add(phone_button)
+
+# ======================
+# MAIN MENU
+# ======================
+
+main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
+
+main_menu.row(
+    "🎁 Акции",
+    "🏆 Розыгрыш недели"
+)
+
+main_menu.row(
+    "⭐ Мои посещения",
+    "📍 Контакты"
+)
 
 # ======================
 # START
@@ -76,7 +92,7 @@ async def start(message: types.Message):
     }
 
     await message.answer(
-        "💨 Добро пожаловать в DIA.MIST Club!\n\n"
+        "💨 Приветствую тебя в DIA.MIST!\n\n"
         "🎁 Участвуй в еженедельных розыгрышах\n"
         "⭐ Копи посещения\n"
         "🔥 Получай бонусы и подарки\n"
@@ -105,6 +121,51 @@ async def contact_handler(message: types.Message):
     )
 
 # ======================
+# MENU BUTTONS
+# ======================
+
+@dp.message_handler(lambda message: message.text == "🎁 Акции")
+async def promotions(message: types.Message):
+
+    await message.answer(
+        "🔥 АКЦИЯ НЕДЕЛИ\n\n"
+        "Закажи 2 кальяна и получи чайник чая бесплатно ☕"
+    )
+
+
+@dp.message_handler(lambda message: message.text == "🏆 Розыгрыш недели")
+async def giveaway(message: types.Message):
+
+    await message.answer(
+        "🏆 РОЗЫГРЫШ НЕДЕЛИ\n\n"
+        "🎁 Приз: бесплатный кальян\n\n"
+        "Победитель будет выбран случайным образом в воскресенье."
+    )
+
+
+@dp.message_handler(lambda message: message.text == "⭐ Мои посещения")
+async def visits(message: types.Message):
+
+    await message.answer(
+        "⭐ Твои посещения\n\n"
+        "Пока посещений: 0\n\n"
+        "До бесплатного кальяна осталось 6 посещений 🔥"
+    )
+
+
+@dp.message_handler(lambda message: message.text == "📍 Контакты")
+async def contacts(message: types.Message):
+
+    await message.answer(
+        "📍 DIA.MIST\n\n"
+        "Укажи здесь свой адрес\n\n"
+        "🕐 Режим работы:\n"
+        "12:00 - 23:00\n\n"
+        "📞 Телефон:\n"
+        "+XXXXXXXXXXX"
+    )
+
+# ======================
 # TEXT HANDLER
 # ======================
 
@@ -118,7 +179,7 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # Шаг 1 — имя
+    # Имя
 
     if "name" not in data:
 
@@ -130,12 +191,12 @@ async def handler(message: types.Message):
         )
         return
 
-    # Если номер ещё не получен — ждём контакт
+    # Ждем контакт
 
     if "phone" not in data:
         return
 
-    # Шаг 2 — день рождения
+    # День рождения
 
     if "birthday" not in data:
 
@@ -149,18 +210,16 @@ async def handler(message: types.Message):
             data["name"],
             data["phone"],
             data["birthday"],
-            0,  # visits
-            0,  # free_hookah
+            0,
+            0,
             reg_date
         ])
 
         await message.answer(
             "🎉 Регистрация завершена!\n\n"
             "Добро пожаловать в DIA.MIST Club 💨\n\n"
-            "⭐ Посещений: 0\n"
-            "🎁 Бесплатных кальянов: 0\n\n"
-            "Следи за акциями и розыгрышами в нашем канале 🔥",
-            reply_markup=ReplyKeyboardRemove()
+            "Теперь тебе доступны все возможности клуба 👇",
+            reply_markup=main_menu
         )
 
         user_data.pop(user_id)
