@@ -166,7 +166,7 @@ async def contacts(message: types.Message):
     )
 
 # ======================
-# TEXT HANDLER
+# TEXT HANDLER (REGISTRATION)
 # ======================
 
 @dp.message_handler(content_types=types.ContentTypes.TEXT)
@@ -179,8 +179,7 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # Имя
-
+    # имя
     if "name" not in data:
 
         data["name"] = message.text
@@ -191,13 +190,11 @@ async def handler(message: types.Message):
         )
         return
 
-    # Ждем контакт
-
+    # ждём телефон
     if "phone" not in data:
         return
 
-    # День рождения
-
+    # день рождения
     if "birthday" not in data:
 
         data["birthday"] = message.text
@@ -225,11 +222,9 @@ async def handler(message: types.Message):
         user_data.pop(user_id)
 
 # ======================
-# RUN
+# START BOT (FIX FOR RENDER)
 # ======================
 
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
 async def on_startup(dp):
     await bot.delete_webhook(drop_pending_updates=True)
 
