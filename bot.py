@@ -1,15 +1,14 @@
 from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardRemove
-)
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
+
+from aiohttp import web
+import threading
 
 # ======================
 # TELEGRAM
@@ -46,7 +45,7 @@ sheet = client.open("DIA.MIST CRM").sheet1
 user_data = {}
 
 # ======================
-# BUTTON PHONE
+# KEYBOARD
 # ======================
 
 phone_keyboard = ReplyKeyboardMarkup(
@@ -62,7 +61,7 @@ phone_button = KeyboardButton(
 phone_keyboard.add(phone_button)
 
 # ======================
-# START
+# BOT HANDLERS
 # ======================
 
 @dp.message_handler(commands=["start"])
@@ -79,14 +78,9 @@ async def start(message: types.Message):
         "💨 Приветсвую тебя в DIA.MIST!\n\n"
         "🎁 Участвуй в еженедельных розыгрышах\n"
         "⭐ Копи посещения\n"
-        "🔥 Получай бонусы и подарки\n"
-        "🎂 Получай подарок на день рождения\n\n"
-        "Для участия напиши своё имя 👇"
+        "🔥 Получай бонусы и подарки\n\n"
+        "Напиши своё имя 👇"
     )
-
-# ======================
-# CONTACT
-# ======================
 
 @dp.message_handler(content_types=['contact'])
 async def contact_handler(message: types.Message):
@@ -99,14 +93,9 @@ async def contact_handler(message: types.Message):
     user_data[user_id]["phone"] = message.contact.phone_number
 
     await message.answer(
-        "🎂 Когда у тебя день рождения?\n\n"
-        "Например: 15.08",
+        "🎂 Когда у тебя день рождения? (пример: 15.08)",
         reply_markup=ReplyKeyboardRemove()
     )
-
-# ======================
-# TEXT HANDLER
-# ======================
 
 @dp.message_handler(content_types=types.ContentTypes.TEXT)
 async def handler(message: types.Message):
@@ -118,25 +107,20 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # Шаг 1 — имя
-
+    # NAME
     if "name" not in data:
-
         data["name"] = message.text
 
         await message.answer(
-            "📱 Нажми кнопку ниже и поделись номером телефона",
+            "📱 Отправь номер телефона кнопкой ниже",
             reply_markup=phone_keyboard
         )
         return
 
-    # Если номер ещё не получен — ждём контакт
-
     if "phone" not in data:
         return
 
-    # Шаг 2 — день рождения
-
+    # BIRTHDAY
     if "birthday" not in data:
 
         data["birthday"] = message.text
@@ -149,25 +133,42 @@ async def handler(message: types.Message):
             data["name"],
             data["phone"],
             data["birthday"],
-            0,  # visits
-            0,  # free_hookah
+            0,
+            0,
             reg_date
         ])
 
         await message.answer(
-            "🎉 Регистрация завершена!\n\n"
-            "Добро пожаловать в DIA.MIST Club 💨\n\n"
-            "⭐ Посещений: 0\n"
-            "🎁 Бесплатных кальянов: 0\n\n"
-            "Следи за акциями и розыгрышами в нашем канале 🔥",
+            "🎉 Регистрация завершена!",
             reply_markup=ReplyKeyboardRemove()
         )
 
         user_data.pop(user_id)
 
 # ======================
-# RUN
+# WEB SERVER (ВАЖНО ДЛЯ RENDER)
+# ======================
+
+async def handle(request):
+    return web.Response(text="Bot is running ✅")
+
+def run_web():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    return app
+
+def start_web():
+    port = int(os.environ.get("PORT", 10000))
+    web.run_app(run_web(), host="0.0.0.0", port=port)
+
+# ======================
+# START BOTH (BOT + WEB)
 # ======================
 
 if __name__ == "__main__":
+
+    # запускаем web сервер в отдельном потоке
+    threading.Thread(target=start_web, daemon=True).start()
+
+    # запускаем бот
     executor.start_polling(dp, skip_updates=True)
