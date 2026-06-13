@@ -1,30 +1,11 @@
 from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardRemove
-)
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
-
-# ======================
-# FLASK (FIX FOR RENDER)
-# ======================
-from flask import Flask
-import threading
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "DIA.MIST bot is running"
-
-def run_web():
-    app.run(host="0.0.0.0", port=10000)
 
 # ======================
 # TELEGRAM
@@ -65,17 +46,10 @@ user_data = {}
 # ======================
 
 phone_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-
-phone_button = KeyboardButton(
-    text="📱 Поделиться номером",
-    request_contact=True
-)
-
-phone_keyboard.add(phone_button)
+phone_keyboard.add(KeyboardButton("📱 Поделиться номером", request_contact=True))
 
 main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
-
-main_menu.row("🎁 Акции", "🏆 Розыгрыш недели")
+main_menu.row("🎁 Акции", "🏆 Розыгрыш")
 main_menu.row("⭐ Мои посещения", "📍 Контакты")
 
 # ======================
@@ -88,15 +62,12 @@ async def start(message: types.Message):
     user_id = message.from_user.id
     args = message.get_args()
 
-    # если человек уже есть в памяти
     user_data.setdefault(user_id, {
         "telegram_id": user_id,
         "username": message.from_user.username
     })
 
-    # ======================
-    # QR VISIT MODE
-    # ======================
+    # ================= QR VISIT =================
     if args and args.startswith("visit_"):
 
         target_id = args.replace("visit_", "")
@@ -108,38 +79,27 @@ async def start(message: types.Message):
             if str(row.get("telegram_id")) == str(target_id):
 
                 visits = int(row.get("visits", 0)) + 1
-
                 sheet.update_cell(i, 6, visits)
 
-                # бонус
                 if visits >= 6:
-
                     sheet.update_cell(i, 7, int(row.get("free_hookah", 0)) + 1)
 
                     await bot.send_message(
                         target_id,
-                        "🔥 Поздравляем!\n\n"
-                        "Ты получил бесплатный кальян 🎁"
+                        "🔥 Поздравляем!\n\nТы получил бесплатный кальян 🎁"
                     )
 
-                await message.answer(
-                    f"⭐ Визит засчитан!\n"
-                    f"Всего: {visits}/6"
-                )
-
+                await message.answer(f"⭐ Визит засчитан: {visits}/6")
                 return
 
         await message.answer("❌ Пользователь не найден")
         return
 
-    # ======================
-    # NORMAL START
-    # ======================
+    # ================= NORMAL START =================
     await message.answer(
-        "💨 Приветствую тебя в DIA.MIST!\n\n"
-        "🎁 Участвуй в розыгрышах\n"
-        "⭐ Копи посещения (6 = бесплатный кальян)\n"
-        "🔥 Бонусы и подарки\n\n"
+        "💨 Добро пожаловать в DIA.MIST!\n\n"
+        "🎁 Розыгрыши и бонусы\n"
+        "⭐ Копи посещения (6 = кальян)\n\n"
         "Напиши своё имя 👇"
     )
 
@@ -147,8 +107,8 @@ async def start(message: types.Message):
 # CONTACT
 # ======================
 
-@dp.message_handler(content_types=['contact'])
-async def contact_handler(message: types.Message):
+@dp.message_handler(content_types=["contact"])
+async def contact(message: types.Message):
 
     user_id = message.from_user.id
 
@@ -158,17 +118,16 @@ async def contact_handler(message: types.Message):
     user_data[user_id]["phone"] = message.contact.phone_number
 
     await message.answer(
-        "🎂 Когда у тебя день рождения?\n\n"
-        "Например: 15.08",
+        "🎂 Когда день рождения?\n\nНапример: 15.08",
         reply_markup=ReplyKeyboardRemove()
     )
 
 # ======================
-# REGISTRATION FLOW
+# REGISTRATION
 # ======================
 
 @dp.message_handler(content_types=types.ContentTypes.TEXT)
-async def handler(message: types.Message):
+async def text_handler(message: types.Message):
 
     user_id = message.from_user.id
 
@@ -177,13 +136,11 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # name
     if "name" not in data:
-
         data["name"] = message.text
 
         await message.answer(
-            "📱 Поделись номером телефона",
+            "📱 Отправь номер телефона",
             reply_markup=phone_keyboard
         )
         return
@@ -194,7 +151,6 @@ async def handler(message: types.Message):
     if "birthday" not in data:
 
         data["birthday"] = message.text
-
         reg_date = datetime.now().strftime("%d.%m.%Y")
 
         sheet.append_row([
@@ -209,8 +165,7 @@ async def handler(message: types.Message):
         ])
 
         await message.answer(
-            "🎉 Регистрация завершена!\n\n"
-            "Теперь копи посещения и получай бонусы 🔥",
+            "🎉 Готово!\n\nТы в системе DIA.MIST 🔥",
             reply_markup=main_menu
         )
 
@@ -220,18 +175,18 @@ async def handler(message: types.Message):
 # MENU
 # ======================
 
-@dp.message_handler(lambda message: message.text == "🎁 Акции")
-async def promotions(message: types.Message):
-    await message.answer("🔥 АКЦИЯ НЕДЕЛИ\n\n2 кальяна = чай бесплатно ☕")
+@dp.message_handler(lambda m: m.text == "🎁 Акции")
+async def promo(m):
+    await m.answer("🔥 Акция недели...")
 
-@dp.message_handler(lambda message: message.text == "🏆 Розыгрыш недели")
-async def giveaway(message: types.Message):
-    await message.answer("🏆 РОЗЫГРЫШ НЕДЕЛИ\n\nБесплатный кальян каждую неделю 🔥")
+@dp.message_handler(lambda m: m.text == "🏆 Розыгрыш")
+async def give(m):
+    await m.answer("🏆 Розыгрыш каждую неделю")
 
-@dp.message_handler(lambda message: message.text == "⭐ Мои посещения")
-async def visits(message: types.Message):
+@dp.message_handler(lambda m: m.text == "⭐ Мои посещения")
+async def visits(m):
 
-    user_id = message.from_user.id
+    user_id = m.from_user.id
 
     data = sheet.get_all_records()
 
@@ -239,24 +194,18 @@ async def visits(message: types.Message):
         if str(row["telegram_id"]) == str(user_id):
 
             v = int(row["visits"])
-
-            await message.answer(
-                f"⭐ Твои посещения: {v}/6\n"
-                f"До бесплатного кальяна: {6 - v}"
-            )
+            await m.answer(f"⭐ {v}/6")
             return
 
-    await message.answer("Ты ещё не зарегистрирован.")
+    await m.answer("Нет данных")
 
-@dp.message_handler(lambda message: message.text == "📍 Контакты")
-async def contacts(message: types.Message):
-    await message.answer("📍 DIA.MIST\n\n🕐 12:00–23:00")
+@dp.message_handler(lambda m: m.text == "📍 Контакты")
+async def contacts(m):
+    await m.answer("📍 DIA.MIST")
 
 # ======================
 # RUN
 # ======================
 
 if __name__ == "__main__":
-
-    threading.Thread(target=run_web).start()
     executor.start_polling(dp, skip_updates=True)
