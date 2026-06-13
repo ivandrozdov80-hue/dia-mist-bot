@@ -30,15 +30,22 @@ logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.environ["TOKEN"]
 
-WEBHOOK_HOST = os.environ.get("WEBHOOK_HOST")  # https://your-domain.com
+WEBHOOK_HOST = os.environ.get("WEBHOOK_HOST", "").strip()
 WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/webhook")
+
+if not WEBHOOK_HOST:
+    raise ValueError("WEBHOOK_HOST is not set in environment variables")
+
+if not WEBHOOK_HOST.startswith("https://"):
+    raise ValueError("WEBHOOK_HOST must start with https://")
+
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.environ.get("PORT", 8000))
 
 # ======================
-# BOT INIT
+# BOT
 # ======================
 
 bot = Bot(token=TOKEN)
@@ -90,7 +97,10 @@ class Form(StatesGroup):
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
     await Form.name.set()
-    await message.answer("💨 DIA.MIST\n\nНапиши своё имя 👇", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "💨 DIA.MIST\n\nНапиши своё имя 👇",
+        reply_markup=ReplyKeyboardRemove()
+    )
 
 # ======================
 # NAME
@@ -114,7 +124,7 @@ async def get_name(message: types.Message, state: FSMContext):
 async def get_contact(message: types.Message, state: FSMContext):
 
     if not message.contact:
-        await message.answer("Нажми кнопку, чтобы отправить номер")
+        await message.answer("Нажми кнопку 📱")
         return
 
     await state.update_data(phone=message.contact.phone_number)
@@ -125,10 +135,7 @@ async def get_contact(message: types.Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
 
-# ======================
-# PHONE fallback text
-# ======================
-
+# fallback если пишут текст вместо кнопки
 @dp.message_handler(state=Form.phone)
 async def phone_fallback(message: types.Message):
     await message.answer("Нажми кнопку 📱 'Отправить номер'")
@@ -140,11 +147,10 @@ async def phone_fallback(message: types.Message):
 @dp.message_handler(state=Form.birthday)
 async def get_birthday(message: types.Message, state: FSMContext):
 
-    # validate date
     try:
         datetime.strptime(message.text, "%d.%m.%Y")
     except ValueError:
-        await message.answer("❌ Формат: ДД.ММ.ГГГГ (например 25.12.2000)")
+        await message.answer("❌ Формат: ДД.ММ.ГГГГ (пример 25.12.2000)")
         return
 
     data = await state.get_data()
@@ -161,8 +167,8 @@ async def get_birthday(message: types.Message, state: FSMContext):
             datetime.now().strftime("%d.%m.%Y %H:%M")
         ])
     except Exception as e:
-        logging.error(f"Sheets error: {e}")
-        await message.answer("❌ Ошибка сохранения. Попробуй позже")
+        logging.error(f"Google Sheets error: {e}")
+        await message.answer("❌ Ошибка сохранения, попробуй позже")
         await state.finish()
         return
 
@@ -174,23 +180,19 @@ async def get_birthday(message: types.Message, state: FSMContext):
     await state.finish()
 
 # ======================
-# WEBHOOK STARTUP
+# WEBHOOK
 # ======================
 
 async def on_startup(dp):
-    logging.info("Setting webhook...")
+    logging.info(f"Webhook set: {WEBHOOK_URL}")
     await bot.set_webhook(WEBHOOK_URL)
 
-# ======================
-# SHUTDOWN
-# ======================
-
 async def on_shutdown(dp):
-    logging.info("Deleting webhook...")
+    logging.info("Webhook deleted")
     await bot.delete_webhook()
 
 # ======================
-# RUN WEBHOOK SERVER
+# RUN
 # ======================
 
 if __name__ == "__main__":
