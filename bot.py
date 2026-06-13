@@ -1,10 +1,8 @@
 import os
 import json
-from flask import Flask, request
+import asyncio
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.dispatcher.webhook import get_new_configured_app
+from aiogram import Bot, Dispatcher, types, executor
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 import gspread
@@ -12,17 +10,20 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
 # ======================
-# CONFIG
+# BOT
 # ======================
 
 TOKEN = os.environ["TOKEN"]
 
-WEBHOOK_PATH = f"/webhook/{TOKEN}"
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # Render URL
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
-dp.middleware.setup(LoggingMiddleware())
+
+# ======================
+# FIX TELEGRAM CONFLICT
+# ======================
+
+async def on_startup(_):
+    await bot.delete_webhook(drop_pending_updates=True)
 
 # ======================
 # GOOGLE SHEETS
@@ -35,7 +36,11 @@ scope = [
 
 creds_dict = json.loads(os.environ["GOOGLE_CREDS"])
 
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    creds_dict,
+    scope
+)
+
 client = gspread.authorize(creds)
 sheet = client.open("DIA.MIST CRM").sheet1
 
@@ -69,9 +74,7 @@ async def start(message: types.Message):
         "username": message.from_user.username
     }
 
-    await message.answer(
-        "💨 DIA.MIST\n\nНапиши имя 👇"
-    )
+    await message.answer("💨 DIA.MIST\n\nНапиши имя 👇")
 
 # ======================
 # CONTACT
@@ -141,32 +144,8 @@ async def text(message: types.Message):
         user_data.pop(user_id)
 
 # ======================
-# FLASK WEB SERVER
-# ======================
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "DIA.MIST bot is running"
-
-# ======================
-# WEBHOOK SETUP
-# ======================
-
-@app.route(WEBHOOK_PATH, methods=["POST"])
-async def webhook():
-    update = types.Update(**request.json)
-    await dp.process_update(update)
-    return "ok"
-
-@app.before_first_request
-async def on_start():
-    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
-
-# ======================
 # RUN
 # ======================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
