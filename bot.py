@@ -6,22 +6,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
-import threading
-
-# ======================
-# FLASK (обход Render)
-# ======================
-from flask import Flask
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Bot is running"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
 
 # ======================
 # TELEGRAM
@@ -69,7 +53,7 @@ main_menu.row("🎁 Акции", "🏆 Розыгрыш")
 main_menu.row("⭐ Мои посещения", "📍 Контакты")
 
 # ======================
-# START + QR
+# START
 # ======================
 
 @dp.message_handler(commands=["start"])
@@ -188,5 +172,4 @@ async def text(message: types.Message):
 # ======================
 
 if __name__ == "__main__":
-    threading.Thread(target=run_web).start()
     executor.start_polling(dp, skip_updates=True)
