@@ -1,28 +1,28 @@
-from aiogram import Bot, Dispatcher, types, executor
+import os
+import json
+from flask import Flask, request
+
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.dispatcher.webhook import get_new_configured_app
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import os
-import json
-import asyncio
 
 # ======================
-# BOT
+# CONFIG
 # ======================
 
 TOKEN = os.environ["TOKEN"]
 
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # Render URL
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
-
-# ======================
-# RESET WEBHOOK (ВАЖНО)
-# ======================
-
-async def on_startup(_):
-    await bot.delete_webhook(drop_pending_updates=True)
+dp.middleware.setup(LoggingMiddleware())
 
 # ======================
 # GOOGLE SHEETS
@@ -35,11 +35,7 @@ scope = [
 
 creds_dict = json.loads(os.environ["GOOGLE_CREDS"])
 
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    creds_dict,
-    scope
-)
-
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("DIA.MIST CRM").sheet1
 
@@ -57,8 +53,7 @@ phone_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=Tru
 phone_keyboard.add(KeyboardButton("📱 Поделиться номером", request_contact=True))
 
 main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
-main_menu.row("🎁 Акции", "🏆 Розыгрыш")
-main_menu.row("⭐ Мои посещения", "📍 Контакты")
+main_menu.row("🎁 Акции", "⭐ Мои посещения")
 
 # ======================
 # START
@@ -75,8 +70,7 @@ async def start(message: types.Message):
     }
 
     await message.answer(
-        "💨 DIA.MIST\n\n"
-        "Напиши своё имя 👇"
+        "💨 DIA.MIST\n\nНапиши имя 👇"
     )
 
 # ======================
@@ -94,7 +88,7 @@ async def contact(message: types.Message):
     user_data[user_id]["phone"] = message.contact.phone_number
 
     await message.answer(
-        "🎂 Теперь отправь дату рождения (дд.мм)",
+        "🎂 Дата рождения?",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -112,25 +106,21 @@ async def text(message: types.Message):
 
     data = user_data[user_id]
 
-    # NAME
     if "name" not in data:
         data["name"] = message.text
 
         await message.answer(
-            "📱 Нажми кнопку и отправь номер",
+            "📱 Отправь номер",
             reply_markup=phone_keyboard
         )
         return
 
-    # WAIT PHONE
     if "phone" not in data:
         return
 
-    # BIRTHDAY
     if "birthday" not in data:
 
         data["birthday"] = message.text
-        reg = datetime.now().strftime("%d.%m.%Y")
 
         sheet.append_row([
             data["telegram_id"],
@@ -138,62 +128,45 @@ async def text(message: types.Message):
             data["name"],
             data["phone"],
             data["birthday"],
-            0,  # visits
-            0,  # free hookah
-            reg
+            0,
+            0,
+            datetime.now().strftime("%d.%m.%Y")
         ])
 
         await message.answer(
-            "🎉 Готово!\n\n"
-            "Ты в DIA.MIST Club 🔥",
+            "🎉 Готово!",
             reply_markup=main_menu
         )
 
         user_data.pop(user_id)
 
 # ======================
-# ADMIN: ADD VISIT
+# FLASK WEB SERVER
 # ======================
 
-@dp.message_handler(commands=["visit"])
-async def visit(message: types.Message):
+app = Flask(__name__)
 
-    if not message.reply_to_message:
-        await message.answer("❌ Ответь на клиента и напиши /visit")
-        return
+@app.route("/")
+def home():
+    return "DIA.MIST bot is running"
 
-    target_id = message.reply_to_message.from_user.id
+# ======================
+# WEBHOOK SETUP
+# ======================
 
-    data = sheet.get_all_records()
+@app.route(WEBHOOK_PATH, methods=["POST"])
+async def webhook():
+    update = types.Update(**request.json)
+    await dp.process_update(update)
+    return "ok"
 
-    for i, row in enumerate(data, start=2):
-
-        if str(row.get("telegram_id")) == str(target_id):
-
-            visits = int(row.get("visits", 0)) + 1
-            sheet.update_cell(i, 6, visits)
-
-            await message.answer(f"⭐ Визит: {visits}/6")
-
-            if visits >= 6:
-                sheet.update_cell(i, 7, int(row.get("free_hookah", 0)) + 1)
-
-                await bot.send_message(
-                    target_id,
-                    "🔥 Бесплатный кальян!"
-                )
-
-            return
-
-    await message.answer("❌ Не найден")
+@app.before_first_request
+async def on_start():
+    await bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
 
 # ======================
 # RUN
 # ======================
 
 if __name__ == "__main__":
-    executor.start_polling(
-        dp,
-        skip_updates=True,
-        on_startup=on_startup
-    )
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
