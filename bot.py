@@ -8,7 +8,7 @@ import os
 import json
 
 # ======================
-# TELEGRAM
+# BOT
 # ======================
 
 TOKEN = os.environ["TOKEN"]
@@ -53,7 +53,7 @@ main_menu.row("🎁 Акции", "🏆 Розыгрыш")
 main_menu.row("⭐ Мои посещения", "📍 Контакты")
 
 # ======================
-# START
+# START (QR SYSTEM)
 # ======================
 
 @dp.message_handler(commands=["start"])
@@ -67,7 +67,6 @@ async def start(message: types.Message):
         "username": message.from_user.username
     })
 
-    # QR VISIT
     if args and args.startswith("visit_"):
 
         target_id = args.replace("visit_", "")
@@ -92,18 +91,16 @@ async def start(message: types.Message):
                 await message.answer(f"⭐ Визит засчитан: {visits}/6")
                 return
 
-        await message.answer("❌ Не найден пользователь")
+        await message.answer("❌ Пользователь не найден")
         return
 
-    await message.answer(
-        "💨 DIA.MIST\n\nНапиши имя 👇"
-    )
+    await message.answer("💨 DIA.MIST\n\nНапиши имя 👇")
 
 # ======================
 # CONTACT
 # ======================
 
-@dp.message_handler(content_types=['contact'])
+@dp.message_handler(content_types=["contact"])
 async def contact(message: types.Message):
 
     user_id = message.from_user.id
@@ -168,7 +165,7 @@ async def text(message: types.Message):
         user_data.pop(user_id)
 
 # ======================
-# RUN
+# RUN (ВАЖНО ДЛЯ RENDER)
 # ======================
 
 if __name__ == "__main__":
