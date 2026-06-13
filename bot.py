@@ -1,17 +1,29 @@
 from aiogram import Bot, Dispatcher, types, executor
+from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove
+)
+
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
 
-# Telegram Bot
+# ======================
+# TELEGRAM
+# ======================
+
 TOKEN = os.environ["TOKEN"]
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
-# Google Sheets
+# ======================
+# GOOGLE SHEETS
+# ======================
+
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
@@ -28,9 +40,31 @@ client = gspread.authorize(creds)
 
 sheet = client.open("DIA.MIST CRM").sheet1
 
-# Temporary user storage
+# ======================
+# MEMORY
+# ======================
+
 user_data = {}
 
+# ======================
+# PHONE BUTTON
+# ======================
+
+phone_keyboard = ReplyKeyboardMarkup(
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+
+phone_button = KeyboardButton(
+    text="📱 Поделиться номером",
+    request_contact=True
+)
+
+phone_keyboard.add(phone_button)
+
+# ======================
+# START
+# ======================
 
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
@@ -44,13 +78,36 @@ async def start(message: types.Message):
 
     await message.answer(
         "💨 Добро пожаловать в DIA.MIST Club!\n\n"
-        "🎁 Участвуй в розыгрышах\n"
+        "🎁 Участвуй в еженедельных розыгрышах\n"
         "⭐ Копи посещения\n"
         "🔥 Получай бонусы и подарки\n"
         "🎂 Получай подарок на день рождения\n\n"
         "Для участия напиши своё имя 👇"
     )
 
+# ======================
+# CONTACT
+# ======================
+
+@dp.message_handler(content_types=['contact'])
+async def contact_handler(message: types.Message):
+
+    user_id = message.from_user.id
+
+    if user_id not in user_data:
+        return
+
+    user_data[user_id]["phone"] = message.contact.phone_number
+
+    await message.answer(
+        "🎂 Когда у тебя день рождения?\n\n"
+        "Например: 15.08",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+# ======================
+# MAIN HANDLER
+# ======================
 
 @dp.message_handler()
 async def handler(message: types.Message):
@@ -65,23 +122,20 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # Имя
+    # Шаг 1 — Имя
+
     if "name" not in data:
+
         data["name"] = message.text
+
         await message.answer(
-            "📱 Отправь номер телефона"
+            "📱 Нажми кнопку ниже и поделись номером телефона",
+            reply_markup=phone_keyboard
         )
 
-    # Телефон
-    elif "phone" not in data:
-        data["phone"] = message.text
-        await message.answer(
-            "🎂 Когда у тебя день рождения?\n\n"
-            "Например: 15.08"
-        )
+    # Шаг 2 — День рождения
 
-    # День рождения
-    elif "birthday" not in data:
+    elif "phone" in data and "birthday" not in data:
 
         data["birthday"] = message.text
 
@@ -93,8 +147,8 @@ async def handler(message: types.Message):
             data["name"],
             data["phone"],
             data["birthday"],
-            0,
-            0,
+            0,  # visits
+            0,  # free_hookah
             reg_date
         ])
 
@@ -103,11 +157,15 @@ async def handler(message: types.Message):
             "Добро пожаловать в DIA.MIST Club 💨\n\n"
             "⭐ Посещений: 0\n"
             "🎁 Бесплатных кальянов: 0\n\n"
-            "Следи за акциями и розыгрышами в нашем канале 🔥"
+            "Следи за акциями и розыгрышами в нашем канале 🔥",
+            reply_markup=ReplyKeyboardRemove()
         )
 
         user_data.pop(user_id)
 
+# ======================
+# RUN
+# ======================
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
