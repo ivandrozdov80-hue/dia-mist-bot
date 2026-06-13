@@ -12,6 +12,21 @@ import os
 import json
 
 # ======================
+# FLASK (FIX FOR RENDER)
+# ======================
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "DIA.MIST bot is running"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
+
+# ======================
 # TELEGRAM
 # ======================
 
@@ -139,7 +154,7 @@ async def giveaway(message: types.Message):
     await message.answer(
         "🏆 РОЗЫГРЫШ НЕДЕЛИ\n\n"
         "🎁 Бесплатный кальян каждую неделю\n"
-        "Участвуют все зарегистрированные гости 🔥"
+        "Участвуют все гости 🔥"
     )
 
 
@@ -153,11 +168,11 @@ async def visits(message: types.Message):
     for row in data:
         if str(row["telegram_id"]) == str(user_id):
 
-            v = row["visits"]
+            v = int(row["visits"])
 
             await message.answer(
                 f"⭐ Твои посещения: {v}/6\n\n"
-                f"До бесплатного кальяна осталось: {6 - int(v)} 🔥"
+                f"До бесплатного кальяна осталось: {6 - v} 🔥"
             )
             return
 
@@ -186,7 +201,7 @@ async def handler(message: types.Message):
 
     data = user_data[user_id]
 
-    # имя
+    # name
     if "name" not in data:
 
         data["name"] = message.text
@@ -212,14 +227,14 @@ async def handler(message: types.Message):
             data["name"],
             data["phone"],
             data["birthday"],
-            0,  # visits
-            0,  # free_hookah
+            0,
+            0,
             reg_date
         ])
 
         await message.answer(
             "🎉 Регистрация завершена!\n\n"
-            "Теперь копи посещения и получай бесплатный кальян 🔥",
+            "Теперь копи посещения и получай бонусы 🔥",
             reply_markup=main_menu
         )
 
@@ -229,45 +244,46 @@ async def handler(message: types.Message):
 # ADD VISIT (ADMIN)
 # ======================
 
-@dp.message_handler(lambda message: message.text and message.text.startswith("/addvisit"))
+@dp.message_handler(lambda message: message.text and message.text.startswith("/visit"))
 async def add_visit(message: types.Message):
 
-    try:
-        parts = message.text.split()
-        user_id = parts[1]
+    if not message.reply_to_message:
+        await message.answer("❌ Ответь на сообщение клиента и напиши /visit")
+        return
 
-        data = sheet.get_all_records()
+    user_id = message.reply_to_message.from_user.id
 
-        for i, row in enumerate(data, start=2):
+    data = sheet.get_all_records()
 
-            if str(row["telegram_id"]) == str(user_id):
+    for i, row in enumerate(data, start=2):
 
-                visits = int(row["visits"]) + 1
-                sheet.update_cell(i, 6, visits)
+        if str(row["telegram_id"]) == str(user_id):
 
-                await message.answer(f"⭐ Визит добавлен: {visits}/6")
+            visits = int(row["visits"]) + 1
+            sheet.update_cell(i, 6, visits)
 
-                if visits >= 6:
+            await message.answer(f"⭐ Визит добавлен: {visits}/6")
 
-                    sheet.update_cell(i, 7, int(row["free_hookah"]) + 1)
+            if visits >= 6:
 
-                    await bot.send_message(
-                        int(user_id),
-                        "🔥 Поздравляем!\n\n"
-                        "Ты получил бесплатный кальян 🎁"
-                    )
+                sheet.update_cell(i, 7, int(row["free_hookah"]) + 1)
 
-                return
+                await bot.send_message(
+                    user_id,
+                    "🔥 Поздравляем!\n\n"
+                    "Ты получил бесплатный кальян 🎁"
+                )
 
-        await message.answer("❌ Пользователь не найден")
+            return
 
-    except Exception as e:
-        await message.answer("❌ Ошибка команды")
-        print(e)
+    await message.answer("❌ Пользователь не найден")
 
 # ======================
 # RUN
 # ======================
 
 if __name__ == "__main__":
+
+    threading.Thread(target=run_web).start()
+
     executor.start_polling(dp, skip_updates=True)
