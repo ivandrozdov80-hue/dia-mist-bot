@@ -1,42 +1,24 @@
-import os
-import json
-import logging
-from datetime import datetime
-
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.utils import executor
-
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram import Bot, Dispatcher, types, executor
+from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove
+)
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-
-from aiohttp import web
-
-# ======================
-# LOGGING
-# ======================
-
-logging.basicConfig(level=logging.INFO)
+from datetime import datetime
+import os
+import json
 
 # ======================
-# ENV
+# TELEGRAM
 # ======================
 
 TOKEN = os.environ["TOKEN"]
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
-
-PORT = int(os.environ.get("PORT", 10000))
-
-# ======================
-# BOT
-# ======================
 
 bot = Bot(token=TOKEN)
-dp = Dispatcher(bot, storage=MemoryStorage())
+dp = Dispatcher(bot)
 
 # ======================
 # GOOGLE SHEETS
@@ -48,112 +30,144 @@ scope = [
 ]
 
 creds_dict = json.loads(os.environ["GOOGLE_CREDS"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    creds_dict,
+    scope
+)
 
 client = gspread.authorize(creds)
 sheet = client.open("DIA.MIST CRM").sheet1
 
 # ======================
-# KEYBOARDS
+# MEMORY
 # ======================
 
-phone_kb = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-phone_kb.add(KeyboardButton("📱 Отправить номер", request_contact=True))
-
-main_kb = ReplyKeyboardMarkup(resize_keyboard=True)
-main_kb.row("🎁 Акции", "⭐ Мои кальяны")
+user_data = {}
 
 # ======================
-# FSM
+# BUTTON PHONE
 # ======================
 
-class Form(StatesGroup):
-    name = State()
-    phone = State()
-    birthday = State()
+phone_keyboard = ReplyKeyboardMarkup(
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+
+phone_button = KeyboardButton(
+    text="📱 Поделиться номером",
+    request_contact=True
+)
+
+phone_keyboard.add(phone_button)
 
 # ======================
-# HANDLERS
+# START
 # ======================
 
 @dp.message_handler(commands=["start"])
-async def start(message: types.Message, state: FSMContext):
-    await state.finish()
-    await Form.name.set()
-    await message.answer("💨 DIA.MIST\n\nНапиши своё имя 👇", reply_markup=ReplyKeyboardRemove())
+async def start(message: types.Message):
 
-@dp.message_handler(state=Form.name)
-async def name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text)
-    await Form.phone.set()
-    await message.answer("📱 Отправь номер", reply_markup=phone_kb)
+    user_id = message.from_user.id
 
-@dp.message_handler(content_types=types.ContentTypes.CONTACT, state=Form.phone)
-async def phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.contact.phone_number)
-    await Form.birthday.set()
-    await message.answer("🎂 Дата рождения (ДД.ММ.ГГГГ)", reply_markup=ReplyKeyboardRemove())
+    user_data[user_id] = {
+        "telegram_id": user_id,
+        "username": message.from_user.username
+    }
 
-@dp.message_handler(state=Form.birthday)
-async def birthday(message: types.Message, state: FSMContext):
-    try:
-        datetime.strptime(message.text, "%d.%m.%Y")
+    await message.answer(
+        "💨 Приветсвую тебя в DIA.MIST!\n\n"
+        "🎁 Участвуй в еженедельных розыгрышах\n"
+        "⭐ Копи посещения\n"
+        "🔥 Получай бонусы и подарки\n"
+        "🎂 Получай подарок на день рождения\n\n"
+        "Для участия напиши своё имя 👇"
+    )
 
-        data = await state.get_data()
+# ======================
+# CONTACT
+# ======================
+
+@dp.message_handler(content_types=['contact'])
+async def contact_handler(message: types.Message):
+
+    user_id = message.from_user.id
+
+    if user_id not in user_data:
+        return
+
+    user_data[user_id]["phone"] = message.contact.phone_number
+
+    await message.answer(
+        "🎂 Когда у тебя день рождения?\n\n"
+        "Например: 15.08",
+        reply_markup=ReplyKeyboardRemove()
+    )
+
+# ======================
+# TEXT HANDLER
+# ======================
+
+@dp.message_handler(content_types=types.ContentTypes.TEXT)
+async def handler(message: types.Message):
+
+    user_id = message.from_user.id
+
+    if user_id not in user_data:
+        return
+
+    data = user_data[user_id]
+
+    # Шаг 1 — имя
+
+    if "name" not in data:
+
+        data["name"] = message.text
+
+        await message.answer(
+            "📱 Нажми кнопку ниже и поделись номером телефона",
+            reply_markup=phone_keyboard
+        )
+        return
+
+    # Если номер ещё не получен — ждём контакт
+
+    if "phone" not in data:
+        return
+
+    # Шаг 2 — день рождения
+
+    if "birthday" not in data:
+
+        data["birthday"] = message.text
+
+        reg_date = datetime.now().strftime("%d.%m.%Y")
 
         sheet.append_row([
-            message.from_user.id,
-            message.from_user.username or "",
+            data["telegram_id"],
+            data["username"],
             data["name"],
             data["phone"],
-            message.text,
-            1,
-            0,
-            datetime.now().strftime("%d.%m.%Y %H:%M")
+            data["birthday"],
+            0,  # visits
+            0,  # free_hookah
+            reg_date
         ])
 
-        await state.finish()
-        await message.answer("🎉 Готово!", reply_markup=main_kb)
+        await message.answer(
+            "🎉 Регистрация завершена!\n\n"
+            "Добро пожаловать в DIA.MIST Club 💨\n\n"
+            "⭐ Посещений: 0\n"
+            "🎁 Бесплатных кальянов: 0\n\n"
+            "Следи за акциями и розыгрышами в нашем канале 🔥",
+            reply_markup=ReplyKeyboardRemove()
+        )
 
-    except:
-        await message.answer("❌ Формат: ДД.ММ.ГГГГ")
-
-@dp.message_handler(lambda m: m.text == "🎁 Акции")
-async def promo(message: types.Message):
-    await message.answer("🔥 7-й кальян бесплатно 🎁")
-
-@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны")
-async def stats(message: types.Message):
-    records = sheet.get_all_records()
-
-    for r in records:
-        if str(r["telegram_id"]) == str(message.from_user.id):
-            count = int(r.get("hookah_count", 0))
-            await message.answer(f"⭐ Кальяны: {count}")
-            return
-
-    await message.answer("Нет данных")
+        user_data.pop(user_id)
 
 # ======================
-# WEB SERVER (ВАЖНО ДЛЯ RENDER)
-# ======================
-
-async def health(request):
-    return web.Response(text="OK")
-
-app = web.Application()
-app.router.add_get("/", health)
-
-def run_web():
-    web.run_app(app, host="0.0.0.0", port=PORT)
-
-# ======================
-# RUN BOTH (WEB + BOT)
+# RUN
 # ======================
 
 if __name__ == "__main__":
-    import threading
-
-    threading.Thread(target=run_web).start()
-
     executor.start_polling(dp, skip_updates=True)
