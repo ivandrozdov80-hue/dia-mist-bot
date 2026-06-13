@@ -6,6 +6,22 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
 import json
+import threading
+
+# ======================
+# FLASK (обход Render)
+# ======================
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 # ======================
 # TELEGRAM
@@ -53,7 +69,7 @@ main_menu.row("🎁 Акции", "🏆 Розыгрыш")
 main_menu.row("⭐ Мои посещения", "📍 Контакты")
 
 # ======================
-# START (QR + REGISTRATION)
+# START + QR
 # ======================
 
 @dp.message_handler(commands=["start"])
@@ -67,7 +83,7 @@ async def start(message: types.Message):
         "username": message.from_user.username
     })
 
-    # ================= QR VISIT =================
+    # QR VISIT
     if args and args.startswith("visit_"):
 
         target_id = args.replace("visit_", "")
@@ -86,28 +102,24 @@ async def start(message: types.Message):
 
                     await bot.send_message(
                         target_id,
-                        "🔥 Поздравляем!\n\nТы получил бесплатный кальян 🎁"
+                        "🔥 Бесплатный кальян!"
                     )
 
                 await message.answer(f"⭐ Визит засчитан: {visits}/6")
                 return
 
-        await message.answer("❌ Пользователь не найден")
+        await message.answer("❌ Не найден пользователь")
         return
 
-    # ================= NORMAL START =================
     await message.answer(
-        "💨 Добро пожаловать в DIA.MIST!\n\n"
-        "🎁 Розыгрыши и бонусы\n"
-        "⭐ Копи посещения (6 = кальян)\n\n"
-        "Напиши своё имя 👇"
+        "💨 DIA.MIST\n\nНапиши имя 👇"
     )
 
 # ======================
 # CONTACT
 # ======================
 
-@dp.message_handler(content_types=["contact"])
+@dp.message_handler(content_types=['contact'])
 async def contact(message: types.Message):
 
     user_id = message.from_user.id
@@ -118,7 +130,7 @@ async def contact(message: types.Message):
     user_data[user_id]["phone"] = message.contact.phone_number
 
     await message.answer(
-        "🎂 Когда день рождения?\n\nНапример: 15.08",
+        "🎂 Дата рождения?",
         reply_markup=ReplyKeyboardRemove()
     )
 
@@ -127,7 +139,7 @@ async def contact(message: types.Message):
 # ======================
 
 @dp.message_handler(content_types=types.ContentTypes.TEXT)
-async def text_handler(message: types.Message):
+async def text(message: types.Message):
 
     user_id = message.from_user.id
 
@@ -140,7 +152,7 @@ async def text_handler(message: types.Message):
         data["name"] = message.text
 
         await message.answer(
-            "📱 Отправь номер телефона",
+            "📱 Отправь номер",
             reply_markup=phone_keyboard
         )
         return
@@ -151,7 +163,7 @@ async def text_handler(message: types.Message):
     if "birthday" not in data:
 
         data["birthday"] = message.text
-        reg_date = datetime.now().strftime("%d.%m.%Y")
+        reg = datetime.now().strftime("%d.%m.%Y")
 
         sheet.append_row([
             data["telegram_id"],
@@ -161,51 +173,20 @@ async def text_handler(message: types.Message):
             data["birthday"],
             0,
             0,
-            reg_date
+            reg
         ])
 
         await message.answer(
-            "🎉 Готово!\n\nТы в системе DIA.MIST 🔥",
+            "🎉 Готово!",
             reply_markup=main_menu
         )
 
         user_data.pop(user_id)
 
 # ======================
-# MENU
-# ======================
-
-@dp.message_handler(lambda m: m.text == "🎁 Акции")
-async def promo(m):
-    await m.answer("🔥 Акция недели...")
-
-@dp.message_handler(lambda m: m.text == "🏆 Розыгрыш")
-async def give(m):
-    await m.answer("🏆 Розыгрыш каждую неделю")
-
-@dp.message_handler(lambda m: m.text == "⭐ Мои посещения")
-async def visits(m):
-
-    user_id = m.from_user.id
-
-    data = sheet.get_all_records()
-
-    for row in data:
-        if str(row["telegram_id"]) == str(user_id):
-
-            v = int(row["visits"])
-            await m.answer(f"⭐ {v}/6")
-            return
-
-    await m.answer("Нет данных")
-
-@dp.message_handler(lambda m: m.text == "📍 Контакты")
-async def contacts(m):
-    await m.answer("📍 DIA.MIST")
-
-# ======================
 # RUN
 # ======================
 
 if __name__ == "__main__":
+    threading.Thread(target=run_web).start()
     executor.start_polling(dp, skip_updates=True)
