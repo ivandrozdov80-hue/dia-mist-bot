@@ -8,10 +8,13 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils import executor
+
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+
+from aiohttp import web
 
 # ======================
 # LOGGING
@@ -26,8 +29,10 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["TOKEN"]
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 
+PORT = int(os.environ.get("PORT", 10000))
+
 # ======================
-# BOT INIT
+# BOT
 # ======================
 
 bot = Bot(token=TOKEN)
@@ -68,74 +73,29 @@ class Form(StatesGroup):
     birthday = State()
 
 # ======================
-# 🔥 GLOBAL DEBUG (САМЫЙ ВАЖНЫЙ)
+# HANDLERS
 # ======================
 
-@dp.message_handler()
-async def debug_all(message: types.Message):
-    print(f"DEBUG: {message.from_user.id} | {message.text}")
-
-# ======================
-# START
-# ======================
-
-@dp.message_handler(commands=["start"], state="*")
+@dp.message_handler(commands=["start"])
 async def start(message: types.Message, state: FSMContext):
     await state.finish()
     await Form.name.set()
-
-    await message.answer(
-        "💨 DIA.MIST\n\nНапиши своё имя 👇",
-        reply_markup=ReplyKeyboardRemove()
-    )
-
-# ======================
-# NAME
-# ======================
+    await message.answer("💨 DIA.MIST\n\nНапиши своё имя 👇", reply_markup=ReplyKeyboardRemove())
 
 @dp.message_handler(state=Form.name)
 async def name(message: types.Message, state: FSMContext):
-    try:
-        await state.update_data(name=message.text)
-        await Form.phone.set()
-
-        await message.answer("📱 Отправь номер", reply_markup=phone_kb)
-
-    except Exception as e:
-        print("NAME ERROR:", e)
-        await message.answer("❌ Ошибка, попробуй /start")
-
-# ======================
-# PHONE
-# ======================
+    await state.update_data(name=message.text)
+    await Form.phone.set()
+    await message.answer("📱 Отправь номер", reply_markup=phone_kb)
 
 @dp.message_handler(content_types=types.ContentTypes.CONTACT, state=Form.phone)
 async def phone(message: types.Message, state: FSMContext):
-
-    try:
-        if not message.contact:
-            await message.answer("Нажми кнопку 📱")
-            return
-
-        await state.update_data(phone=message.contact.phone_number)
-        await Form.birthday.set()
-
-        await message.answer("🎂 Дата рождения (ДД.ММ.ГГГГ)", reply_markup=ReplyKeyboardRemove())
-
-    except Exception as e:
-        print("PHONE ERROR:", e)
-
-@dp.message_handler(state=Form.phone)
-async def phone_fallback(message: types.Message):
-    await message.answer("Используй кнопку 📱")
-
-# ======================
-# BIRTHDAY + SAVE
-# ======================
+    await state.update_data(phone=message.contact.phone_number)
+    await Form.birthday.set()
+    await message.answer("🎂 Дата рождения (ДД.ММ.ГГГГ)", reply_markup=ReplyKeyboardRemove())
 
 @dp.message_handler(state=Form.birthday)
 async def birthday(message: types.Message, state: FSMContext):
-
     try:
         datetime.strptime(message.text, "%d.%m.%Y")
 
@@ -153,94 +113,47 @@ async def birthday(message: types.Message, state: FSMContext):
         ])
 
         await state.finish()
+        await message.answer("🎉 Готово!", reply_markup=main_kb)
 
-        await message.answer(
-            "🎉 Готово! Добро пожаловать",
-            reply_markup=main_kb
-        )
-
-    except Exception as e:
-        print("BIRTHDAY ERROR:", e)
+    except:
         await message.answer("❌ Формат: ДД.ММ.ГГГГ")
 
-# ======================
-# 🎁 АКЦИИ
-# ======================
-
-@dp.message_handler(lambda m: m.text == "🎁 Акции", state="*")
+@dp.message_handler(lambda m: m.text == "🎁 Акции")
 async def promo(message: types.Message):
-    try:
-        await message.answer(
-            "🔥 АКЦИЯ КАЛЬЯННОЙ\n\n7-й кальян — БЕСПЛАТНО 🎁"
-        )
-    except Exception as e:
-        print("PROMO ERROR:", e)
+    await message.answer("🔥 7-й кальян бесплатно 🎁")
+
+@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны")
+async def stats(message: types.Message):
+    records = sheet.get_all_records()
+
+    for r in records:
+        if str(r["telegram_id"]) == str(message.from_user.id):
+            count = int(r.get("hookah_count", 0))
+            await message.answer(f"⭐ Кальяны: {count}")
+            return
+
+    await message.answer("Нет данных")
 
 # ======================
-# ⭐ КАЛЬЯНЫ
+# WEB SERVER (ВАЖНО ДЛЯ RENDER)
 # ======================
 
-@dp.message_handler(lambda m: m.text == "⭐ Мои кальяны", state="*")
-async def my_hookahs(message: types.Message):
+async def health(request):
+    return web.Response(text="OK")
 
-    try:
-        records = sheet.get_all_records()
+app = web.Application()
+app.router.add_get("/", health)
 
-        for r in records:
-            if str(r.get("telegram_id")) == str(message.from_user.id):
-
-                count = int(r.get("hookah_count", 0))
-                remaining = 7 - (count % 7)
-
-                await message.answer(
-                    f"⭐ Кальяны: {count}\n"
-                    f"🎯 До бонуса: {remaining}"
-                )
-                return
-
-        await message.answer("У тебя пока нет посещений")
-
-    except Exception as e:
-        print("HOOKAH ERROR:", e)
-        await message.answer("❌ Ошибка данных")
+def run_web():
+    web.run_app(app, host="0.0.0.0", port=PORT)
 
 # ======================
-# ➕ АДМИН
-# ======================
-
-@dp.message_handler(commands=["addhookah"])
-async def add_hookah(message: types.Message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        _, user_id = message.text.split()
-
-        records = sheet.get_all_records()
-
-        for i, r in enumerate(records, start=2):
-
-            if str(r.get("telegram_id")) == str(user_id):
-
-                count = int(r.get("hookah_count", 0)) + 1
-                sheet.update_cell(i, 6, count)
-
-                await message.answer("✔ Добавлено")
-
-                if count % 7 == 0:
-                    await bot.send_message(user_id, "🎉 БЕСПЛАТНЫЙ КАЛЬЯН!")
-
-                return
-
-        await message.answer("Не найден")
-
-    except Exception as e:
-        print("ADMIN ERROR:", e)
-
-# ======================
-# RUN (POLLING STABLE)
+# RUN BOTH (WEB + BOT)
 # ======================
 
 if __name__ == "__main__":
+    import threading
+
+    threading.Thread(target=run_web).start()
+
     executor.start_polling(dp, skip_updates=True)
