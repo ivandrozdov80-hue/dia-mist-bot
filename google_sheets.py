@@ -15,9 +15,9 @@ if os.getenv("GOOGLE_CREDS_JSON"):
         os.getenv("GOOGLE_CREDS_JSON"),
         scopes=scope
     )
-elif os.getenv("CRED_FILE"):
+elif os.getenv(CRED_FILE):
     # Из переменной окружения (JSON строка)
-    creds_info = json.loads(os.getenv("CRED_FILE"))
+    creds_info = json.loads(os.getenv(CRED_FILE))
     creds = ServiceAccountCredentials.from_service_account_info(
         creds_info,
         scopes=scope
