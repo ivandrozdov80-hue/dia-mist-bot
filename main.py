@@ -13,6 +13,7 @@ import scheduler
 scheduler_started = False
 _last_msg_time = {}
 
+# test update
 def run_bot():
     global scheduler_started
     while True:
