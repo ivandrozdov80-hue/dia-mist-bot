@@ -1,11 +1,29 @@
 # google_sheets.py
+import os
+import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from config import CRED_FILE, SHEET_URL, logger
 from datetime import datetime
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(CRED_FILE, scope)
+# Создание кредов с scopes
+creds = None
+if os.getenv("GOOGLE_CREDS_JSON"):
+    # Из файла сервисного аккаунта
+    creds = ServiceAccountCredentials.from_service_account_file(
+        os.getenv("GOOGLE_CREDS_JSON"),
+        scopes=scope
+    )
+elif os.getenv("CRED_FILE"):
+    # Из переменной окружения (JSON строка)
+    creds_info = json.loads(os.getenv("CRED_FILE"))
+    creds = ServiceAccountCredentials.from_service_account_info(
+        creds_info,
+        scopes=scope
+    )
+
+
 gc = gspread.authorize(creds)
 sheet = gc.open_by_url(SHEET_URL).sheet1
 
