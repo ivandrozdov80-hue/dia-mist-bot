@@ -140,5 +140,47 @@ class TestCredentials(unittest.TestCase):
             client.return_value.open_by_url.assert_called_once_with(gs.SHEET_URL)
 
 
+class TestEnsureGuestInSheet(GoogleSheetsTestCase):
+    def test_restores_phone_and_birth_on_trimmed_row(self):
+        """Регрессия: row_values обрезает пустой хвост, и обращение к
+        current_row[2] роняло функцию с IndexError – ровно в том сценарии,
+        ради которого она написана."""
+        self.sheet.rows = [['12345', 'Иван', '', '']]
+        guest = (12345, 'Иван', '79161234567', '15.05.1990', 'now',
+                 0, 1, 'active', 'now', 3, '', '', 0, 0)
+
+        gs.ensure_guest_in_sheet(12345, guest)
+
+        self.assertEqual(self.sheet.updated_cells,
+                         [(1, 3, '79161234567'), (1, 4, '15.05.1990')])
+
+    def test_keeps_existing_values(self):
+        self.sheet.rows = [['12345', 'Иван', '79990000000', '01.01.2000']]
+        guest = (12345, 'Иван', '79161234567', '15.05.1990', 'now',
+                 0, 1, 'active', 'now', 3, '', '', 0, 0)
+
+        gs.ensure_guest_in_sheet(12345, guest)
+
+        self.assertEqual(self.sheet.updated_cells, [])
+
+    def test_restores_only_missing_birth(self):
+        self.sheet.rows = [['12345', 'Иван', '79990000000', '']]
+        guest = (12345, 'Иван', '79161234567', '15.05.1990', 'now',
+                 0, 1, 'active', 'now', 3, '', '', 0, 0)
+
+        gs.ensure_guest_in_sheet(12345, guest)
+
+        self.assertEqual(self.sheet.updated_cells, [(1, 4, '15.05.1990')])
+
+    def test_appends_row_when_guest_missing(self):
+        guest = (777, 'Пётр', '79161234567', '', 'создан', 5, 3, 'active',
+                 'обновлён', 3, '', '', 2, 0)
+
+        gs.ensure_guest_in_sheet(777, guest)
+
+        self.assertEqual(len(self.sheet.rows), 1)
+        self.assertEqual(self.sheet.rows[0][:4], ['777', 'Пётр', '79161234567', ''])
+
+
 if __name__ == '__main__':
     unittest.main()

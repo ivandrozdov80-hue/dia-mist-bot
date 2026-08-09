@@ -193,7 +193,10 @@ def ensure_guest_in_sheet(vk_id, guest_data):
             _vk_cache[vk_str] = len(sheet.col_values(1))
             logger.info(f"✅ Добавлена новая строка для гостя {vk_id} в Google Sheets")
         else:
+            # row_values обрезает пустые ячейки справа, поэтому у гостя без
+            # телефона и даты рождения строка приходит короче четырёх колонок
             current_row = sheet.row_values(row_num)
+            current_row += [''] * (4 - len(current_row))
             if not current_row[2] and guest_data[2]:
                 sheet.update_cell(row_num, 3, guest_data[2])
                 logger.info(f"🔄 Восстановлен телефон для гостя {vk_id}")
