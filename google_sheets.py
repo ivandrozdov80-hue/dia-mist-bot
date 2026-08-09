@@ -1,5 +1,6 @@
 # google_sheets.py
 import os
+import re
 import json
 import threading
 import gspread
@@ -83,6 +84,29 @@ def _vk_with_dot(vk_id):
     except:
         return vk_str
 
+def invalidate_cache(vk_id=None):
+    """Сбросить кэш строк. Нужен, если строки в таблице правили руками:
+    номера сдвигаются, и бот начнёт писать данные одного гостя в строку другого."""
+    if vk_id is None:
+        _vk_cache.clear()
+    else:
+        _vk_cache.pop(_vk_to_str(vk_id), None)
+
+
+def _row_from_append_response(response):
+    """Номер добавленной строки из ответа append_row ("'Гости'!A5:N5" -> 5).
+
+    Считать его как len(col_values(1)) нельзя: это лишний запрос к API и
+    неверный результат, если в колонке A есть пропуски.
+    """
+    try:
+        updated_range = response['updates']['updatedRange']
+    except (KeyError, TypeError):
+        return None
+    match = re.search(r'![A-Z]+(\d+)', updated_range)
+    return int(match.group(1)) if match else None
+
+
 def find_row_by_vk(vk_id):
     vk_str = _vk_to_str(vk_id)
     vk_dot = _vk_with_dot(vk_id)
@@ -90,8 +114,6 @@ def find_row_by_vk(vk_id):
     # Проверяем кэш
     if vk_str in _vk_cache:
         return _vk_cache[vk_str]
-    if vk_dot in _vk_cache:
-        return _vk_cache[vk_dot]
 
     try:
         col_a = get_sheet().col_values(1)
@@ -109,10 +131,11 @@ def add_guest_to_sheet(vk_id, name):
         now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         vk_str = _vk_to_str(vk_id)
         row = [vk_str, name, '', '', now, 0, 1, 'active', now, 0, '', '', 0, 0]
-        sheet = get_sheet()
-        sheet.append_row(row)
+        response = get_sheet().append_row(row)
         # Обновляем кэш
-        _vk_cache[vk_str] = len(sheet.col_values(1))
+        row_num = _row_from_append_response(response)
+        if row_num is not None:
+            _vk_cache[vk_str] = row_num
         logger.info(f"✅ Добавлен гость {vk_id} в Google Sheets")
     except Exception as e:
         logger.error(f"Ошибка добавления гостя {vk_id} в Google Sheets: {e}")
@@ -166,13 +189,32 @@ def get_today_master():
         logger.error(f"Ошибка при получении мастера: {e}")
     return "Администратор", "+7-999-000-00-00"
 
+def _read_guest_row(sheet, row_num):
+    """Первые четыре колонки строки, дополненные до полной длины:
+    row_values обрезает пустые ячейки справа."""
+    current_row = sheet.row_values(row_num)
+    current_row += [''] * (4 - len(current_row))
+    return current_row
+
+
 def ensure_guest_in_sheet(vk_id, guest_data):
     try:
-        row_num = find_row_by_vk(vk_id)
         sheet = get_sheet()
+        vk_str = _vk_to_str(vk_id)
+        row_num = find_row_by_vk(vk_id)
+        current_row = None
+
+        if row_num is not None:
+            current_row = _read_guest_row(sheet, row_num)
+            if _vk_to_str(current_row[0]) != vk_str:
+                # Строки в таблице переставили или удалили – кэш указывает не туда
+                logger.warning(f"⚠️ Кэш строки для гостя {vk_id} протух, ищу заново")
+                invalidate_cache(vk_id)
+                row_num = find_row_by_vk(vk_id)
+                current_row = _read_guest_row(sheet, row_num) if row_num else None
+
         if row_num is None:
             now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            vk_str = _vk_to_str(vk_id)
             row = [
                 vk_str,
                 guest_data[1] or '',
@@ -189,14 +231,12 @@ def ensure_guest_in_sheet(vk_id, guest_data):
                 guest_data[12] if len(guest_data) > 12 else 0,
                 guest_data[13] if len(guest_data) > 13 else 0
             ]
-            sheet.append_row(row)
-            _vk_cache[vk_str] = len(sheet.col_values(1))
+            response = sheet.append_row(row)
+            new_row_num = _row_from_append_response(response)
+            if new_row_num is not None:
+                _vk_cache[vk_str] = new_row_num
             logger.info(f"✅ Добавлена новая строка для гостя {vk_id} в Google Sheets")
         else:
-            # row_values обрезает пустые ячейки справа, поэтому у гостя без
-            # телефона и даты рождения строка приходит короче четырёх колонок
-            current_row = sheet.row_values(row_num)
-            current_row += [''] * (4 - len(current_row))
             if not current_row[2] and guest_data[2]:
                 sheet.update_cell(row_num, 3, guest_data[2])
                 logger.info(f"🔄 Восстановлен телефон для гостя {vk_id}")

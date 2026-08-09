@@ -182,5 +182,64 @@ class TestEnsureGuestInSheet(GoogleSheetsTestCase):
         self.assertEqual(self.sheet.rows[0][:4], ['777', 'Пётр', '79161234567', ''])
 
 
+class TestRowCache(GoogleSheetsTestCase):
+    def test_finds_row_and_caches_it(self):
+        self.sheet.rows = [['id'], ['999'], ['12345']]
+
+        self.assertEqual(gs.find_row_by_vk(12345), 3)
+        calls_after_first = self.sheet.calls
+        self.assertEqual(gs.find_row_by_vk(12345), 3)
+        self.assertEqual(self.sheet.calls, calls_after_first,
+                         "повторный поиск не должен ходить в API")
+
+    def test_matches_float_formatted_id(self):
+        """Sheets отдаёт числовые id как 12345.0."""
+        self.sheet.rows = [['12345.0']]
+        self.assertEqual(gs.find_row_by_vk(12345), 1)
+
+    def test_missing_guest_is_not_cached(self):
+        self.sheet.rows = [['999']]
+        self.assertIsNone(gs.find_row_by_vk(12345))
+        self.assertNotIn('12345', gs._vk_cache)
+
+    def test_invalidate_single_and_all(self):
+        gs._vk_cache.update({'1': 10, '2': 20})
+        gs.invalidate_cache(1)
+        self.assertEqual(gs._vk_cache, {'2': 20})
+        gs.invalidate_cache()
+        self.assertEqual(gs._vk_cache, {})
+
+    def test_append_uses_updated_range_not_extra_call(self):
+        """Раньше номер строки добирался ещё одним col_values."""
+        self.sheet.rows = [['999']]
+        calls_before = self.sheet.calls
+
+        gs.add_guest_to_sheet(12345, 'Иван')
+
+        self.assertEqual(gs._vk_cache['12345'], 2)
+        self.assertEqual(self.sheet.calls - calls_before, 1)
+
+    def test_append_row_number_survives_gaps_in_column_a(self):
+        """len(col_values(1)) врёт, если в колонке A есть пропуски."""
+        self.sheet.rows = [['999'], [''], ['888']]
+
+        gs.add_guest_to_sheet(12345, 'Иван')
+
+        self.assertEqual(gs._vk_cache['12345'], 4)
+
+    def test_stale_cache_is_detected_and_refreshed(self):
+        """Строки переставили руками – кэш указывает на чужого гостя."""
+        self.sheet.rows = [['777', 'Пётр', '', ''], ['12345', 'Иван', '', '']]
+        gs._vk_cache['12345'] = 1  # протухший номер: там теперь другой гость
+        guest = (12345, 'Иван', '79161234567', '', 'now',
+                 0, 1, 'active', 'now', 3, '', '', 0, 0)
+
+        gs.ensure_guest_in_sheet(12345, guest)
+
+        self.assertEqual(gs._vk_cache['12345'], 2)
+        self.assertEqual(self.sheet.updated_cells, [(2, 3, '79161234567')])
+        self.assertEqual(self.sheet.rows[0][2], '', "чужая строка не тронута")
+
+
 if __name__ == '__main__':
     unittest.main()
