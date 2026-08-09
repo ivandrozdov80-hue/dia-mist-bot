@@ -70,6 +70,8 @@ def get_sheet():
 
 # Простой кэш для vk_id -> row_number (чтобы не искать каждый раз)
 _vk_cache = {}
+# Гости, чью строку уже сверяли в этом процессе (см. ensure_guest_in_sheet)
+_verified_guests = set()
 
 def _vk_to_str(vk_id):
     try:
@@ -89,8 +91,10 @@ def invalidate_cache(vk_id=None):
     номера сдвигаются, и бот начнёт писать данные одного гостя в строку другого."""
     if vk_id is None:
         _vk_cache.clear()
+        _verified_guests.clear()
     else:
         _vk_cache.pop(_vk_to_str(vk_id), None)
+        _verified_guests.discard(_vk_to_str(vk_id))
 
 
 def _row_from_append_response(response):
@@ -198,9 +202,18 @@ def _read_guest_row(sheet, row_num):
 
 
 def ensure_guest_in_sheet(vk_id, guest_data):
+    """Проверяет, что гость есть в таблице, и восстанавливает потерянные телефон
+    и дату рождения.
+
+    Вызывается на каждое входящее сообщение, поэтому результат запоминается:
+    иначе каждое сообщение стоило бы отдельного запроса к API, а квота Sheets –
+    60 запросов в минуту на пользователя.
+    """
+    vk_str = _vk_to_str(vk_id)
+    if vk_str in _verified_guests:
+        return
     try:
         sheet = get_sheet()
-        vk_str = _vk_to_str(vk_id)
         row_num = find_row_by_vk(vk_id)
         current_row = None
 
@@ -243,5 +256,6 @@ def ensure_guest_in_sheet(vk_id, guest_data):
             if not current_row[3] and guest_data[3]:
                 sheet.update_cell(row_num, 4, guest_data[3])
                 logger.info(f"🔄 Восстановлена дата рождения для гостя {vk_id}")
+        _verified_guests.add(vk_str)
     except Exception as e:
         logger.error(f"⚠️ Ошибка при проверке/восстановлении гостя в Google Sheets: {e}")

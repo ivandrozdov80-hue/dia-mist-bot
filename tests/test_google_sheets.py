@@ -67,6 +67,7 @@ class GoogleSheetsTestCase(unittest.TestCase):
         gs._spreadsheet = None
         gs._sheet = None
         gs._vk_cache.clear()
+        gs._verified_guests.clear()
         self.sheet = FakeWorksheet()
         patcher = mock.patch.object(gs, 'get_sheet', return_value=self.sheet)
         self.addCleanup(patcher.stop)
@@ -180,6 +181,44 @@ class TestEnsureGuestInSheet(GoogleSheetsTestCase):
 
         self.assertEqual(len(self.sheet.rows), 1)
         self.assertEqual(self.sheet.rows[0][:4], ['777', 'Пётр', '79161234567', ''])
+
+
+class TestApiCallBudget(GoogleSheetsTestCase):
+    """ensure_guest_in_sheet вызывается на каждое входящее сообщение,
+    а квота Sheets – 60 запросов в минуту."""
+
+    def setUp(self):
+        super().setUp()
+        self.sheet.rows = [['12345', 'Иван', '79161234567', '15.05.1990']]
+        self.guest = (12345, 'Иван', '79161234567', '15.05.1990', 'now',
+                      0, 1, 'active', 'now', 3, '', '', 0, 0)
+
+    def test_repeated_calls_do_not_hit_api(self):
+        gs.ensure_guest_in_sheet(12345, self.guest)
+        calls_after_first = self.sheet.calls
+
+        for _ in range(10):
+            gs.ensure_guest_in_sheet(12345, self.guest)
+
+        self.assertEqual(self.sheet.calls, calls_after_first)
+
+    def test_failure_is_retried_on_next_message(self):
+        """Гость помечается проверенным только после успешного прохода."""
+        with mock.patch.object(gs, 'find_row_by_vk', side_effect=RuntimeError('API down')):
+            gs.ensure_guest_in_sheet(12345, self.guest)
+        self.assertNotIn('12345', gs._verified_guests)
+
+        gs.ensure_guest_in_sheet(12345, self.guest)
+        self.assertIn('12345', gs._verified_guests)
+
+    def test_invalidate_forces_recheck(self):
+        gs.ensure_guest_in_sheet(12345, self.guest)
+        gs.invalidate_cache(12345)
+        calls_before = self.sheet.calls
+
+        gs.ensure_guest_in_sheet(12345, self.guest)
+
+        self.assertGreater(self.sheet.calls, calls_before)
 
 
 class TestRowCache(GoogleSheetsTestCase):
