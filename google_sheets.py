@@ -1,31 +1,71 @@
 # google_sheets.py
 import os
 import json
+import threading
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from config import CRED_FILE, SHEET_URL, logger
 from datetime import datetime
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# Создание кредов с scopes
-creds = None
-if os.getenv("GOOGLE_CREDS_JSON"):
-    # Из файла сервисного аккаунта
-    creds = ServiceAccountCredentials.from_service_account_file(
-        os.getenv("GOOGLE_CREDS_JSON"),
-        scopes=scope
-    )
-elif os.getenv(CRED_FILE):
-    # Из переменной окружения (JSON строка)
-    creds_info = json.loads(os.getenv(CRED_FILE))
-    creds = ServiceAccountCredentials.from_service_account_info(
-        creds_info,
-        scopes=scope
+# gspread 6.x работает только с google-auth; oauth2client он не поддерживает.
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+_client = None
+_spreadsheet = None
+_sheet = None
+_init_lock = threading.RLock()
+
+
+def _load_credentials():
+    """Креды сервисного аккаунта.
+
+    GOOGLE_CREDS_JSON – либо JSON-строка целиком, либо путь к файлу.
+    Если переменная не задана – берём CRED_FILE из корня проекта.
+    """
+    raw = os.getenv("GOOGLE_CREDS_JSON", "").strip()
+    if raw.startswith("{"):
+        return Credentials.from_service_account_info(json.loads(raw), scopes=SCOPES)
+    if raw:
+        return Credentials.from_service_account_file(raw, scopes=SCOPES)
+    if os.path.isfile(CRED_FILE):
+        return Credentials.from_service_account_file(CRED_FILE, scopes=SCOPES)
+    raise RuntimeError(
+        "Не найдены креды Google: задай GOOGLE_CREDS_JSON (путь к файлу "
+        f"или JSON-строку) либо положи {CRED_FILE} в корень проекта"
     )
 
 
-gc = gspread.authorize(creds)
-sheet = gc.open_by_url(SHEET_URL).sheet1
+def get_client():
+    global _client
+    with _init_lock:
+        if _client is None:
+            _client = gspread.authorize(_load_credentials())
+        return _client
+
+
+def get_spreadsheet():
+    global _spreadsheet
+    with _init_lock:
+        if _spreadsheet is None:
+            _spreadsheet = get_client().open_by_url(SHEET_URL)
+        return _spreadsheet
+
+
+def get_sheet():
+    """Основной лист гостей.
+
+    Подключение создаётся при первом обращении, а не при импорте: сетевой сбой
+    Google или отсутствие кредов не должны мешать боту стартовать.
+    """
+    global _sheet
+    with _init_lock:
+        if _sheet is None:
+            _sheet = get_spreadsheet().sheet1
+        return _sheet
+
 
 # Простой кэш для vk_id -> row_number (чтобы не искать каждый раз)
 _vk_cache = {}
@@ -46,15 +86,15 @@ def _vk_with_dot(vk_id):
 def find_row_by_vk(vk_id):
     vk_str = _vk_to_str(vk_id)
     vk_dot = _vk_with_dot(vk_id)
-    
+
     # Проверяем кэш
     if vk_str in _vk_cache:
         return _vk_cache[vk_str]
     if vk_dot in _vk_cache:
         return _vk_cache[vk_dot]
-    
+
     try:
-        col_a = sheet.col_values(1)
+        col_a = get_sheet().col_values(1)
         for i, val in enumerate(col_a, start=1):
             val_str = str(val).strip()
             if val_str == vk_str or val_str == vk_dot:
@@ -69,6 +109,7 @@ def add_guest_to_sheet(vk_id, name):
         now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         vk_str = _vk_to_str(vk_id)
         row = [vk_str, name, '', '', now, 0, 1, 'active', now, 0, '', '', 0, 0]
+        sheet = get_sheet()
         sheet.append_row(row)
         # Обновляем кэш
         _vk_cache[vk_str] = len(sheet.col_values(1))
@@ -108,16 +149,14 @@ def update_guest_sheet(vk_id, **kwargs):
         if 'free_visit_available' in kwargs:
             updates.append({'range': f'N{row_num}', 'values': [[kwargs['free_visit_available']]]})
         if updates:
-            sheet.batch_update(updates)
+            get_sheet().batch_update(updates)
         logger.info(f"✅ Обновлены данные для гостя {vk_id} в строке {row_num}")
     except Exception as e:
         logger.error(f"Ошибка обновления Google Sheets: {e}")
 
 def get_today_master():
     try:
-        local_creds = ServiceAccountCredentials.from_json_keyfile_name(CRED_FILE, scope)
-        local_gc = gspread.authorize(local_creds)
-        master_sheet = local_gc.open_by_url(SHEET_URL).worksheet("Мастера")
+        master_sheet = get_spreadsheet().worksheet("Мастера")
         records = master_sheet.get_all_records()
         today_day = datetime.now().day
         for row in records:
@@ -130,6 +169,7 @@ def get_today_master():
 def ensure_guest_in_sheet(vk_id, guest_data):
     try:
         row_num = find_row_by_vk(vk_id)
+        sheet = get_sheet()
         if row_num is None:
             now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             vk_str = _vk_to_str(vk_id)
