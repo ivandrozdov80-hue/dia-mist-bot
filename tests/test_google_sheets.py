@@ -183,6 +183,82 @@ class TestEnsureGuestInSheet(GoogleSheetsTestCase):
         self.assertEqual(self.sheet.rows[0][:4], ['777', 'Пётр', '79161234567', ''])
 
 
+class TestUpdateGuestSheet(GoogleSheetsTestCase):
+    def setUp(self):
+        super().setUp()
+        self.sheet.rows = [['12345', 'Иван']]
+
+    def test_maps_fields_to_columns(self):
+        gs.update_guest_sheet(12345, visits=7, level=3, phone='79161234567')
+
+        self.assertEqual(sorted(self.sheet.batches[0], key=lambda u: u['range']), [
+            {'range': 'C1', 'values': [['79161234567']]},
+            {'range': 'F1', 'values': [[7]]},
+            {'range': 'G1', 'values': [[3]]},
+        ])
+
+    def test_no_known_fields_makes_no_request(self):
+        """Раньше при пустом updates запрос не уходил, но в лог всё равно
+        писалось «✅ Обновлены данные»."""
+        with self.assertLogs('DiaMistBot', level='WARNING'):
+            gs.update_guest_sheet(12345, nonexistent_field=1)
+
+        self.assertEqual(self.sheet.batches, [])
+
+    def test_unknown_guest_makes_no_request(self):
+        with self.assertLogs('DiaMistBot', level='WARNING'):
+            gs.update_guest_sheet(999, visits=1)
+
+        self.assertEqual(self.sheet.batches, [])
+
+    def test_columns_match_sheet_layout(self):
+        """add_guest_to_sheet пишет 14 колонок A..N – маппинг не должен
+        выходить за эти границы."""
+        for column in gs.GUEST_COLUMNS.values():
+            self.assertIn(column, list('ABCDEFGHIJKLMN'))
+
+
+class TestGetTodayMaster(GoogleSheetsTestCase):
+    def _records(self, records):
+        book = mock.Mock()
+        book.worksheet.return_value.get_all_records.return_value = records
+        return mock.patch.object(gs, 'get_spreadsheet', return_value=book)
+
+    def test_finds_master_for_today(self):
+        today = gs.datetime.now().day
+        with self._records([{'День': today, 'Имя': 'Артём', 'Телефон': '+7 900'}]):
+            self.assertEqual(gs.get_today_master(), ('Артём', '+7 900'))
+
+    def test_broken_row_does_not_abort_search(self):
+        """int('Понедельник') ронял весь перебор, и функция молча
+        возвращала заглушку, даже если нужная строка была ниже."""
+        today = gs.datetime.now().day
+        with self._records([
+            {'День': 'Понедельник', 'Имя': 'Кривая строка', 'Телефон': '-'},
+            {'День': today, 'Имя': 'Артём', 'Телефон': '+7 900'},
+        ]):
+            self.assertEqual(gs.get_today_master(), ('Артём', '+7 900'))
+
+    def test_no_match_warns_and_falls_back(self):
+        with self._records([{'День': 0, 'Имя': 'Никто', 'Телефон': '-'}]):
+            with self.assertLogs('DiaMistBot', level='WARNING'):
+                self.assertEqual(gs.get_today_master(), gs.DEFAULT_MASTER)
+
+    def test_api_error_falls_back(self):
+        with mock.patch.object(gs, 'get_spreadsheet', side_effect=RuntimeError('API down')):
+            self.assertEqual(gs.get_today_master(), gs.DEFAULT_MASTER)
+
+
+class TestVkIdNormalisation(unittest.TestCase):
+    def test_various_shapes(self):
+        self.assertEqual(gs._vk_to_str(12345), '12345')
+        self.assertEqual(gs._vk_to_str('12345.0'), '12345')
+        self.assertEqual(gs._vk_to_str(None), 'None')
+        self.assertEqual(gs._vk_to_str('мусор'), 'мусор')
+        self.assertEqual(gs._vk_with_dot(12345), '12345.0')
+        self.assertEqual(gs._vk_with_dot('мусор'), 'мусор')
+
+
 class TestApiCallBudget(GoogleSheetsTestCase):
     """ensure_guest_in_sheet вызывается на каждое входящее сообщение,
     а квота Sheets – 60 запросов в минуту."""

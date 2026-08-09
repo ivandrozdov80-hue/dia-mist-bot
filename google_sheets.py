@@ -19,6 +19,23 @@ _spreadsheet = None
 _sheet = None
 _init_lock = threading.RLock()
 
+# Поле гостя -> колонка листа. Порядок колонок задан в database.py: init_db()
+GUEST_COLUMNS = {
+    'phone': 'C',
+    'birth': 'D',
+    'visits': 'F',
+    'level': 'G',
+    'status': 'H',
+    'updated_at': 'I',
+    'registration_step': 'J',
+    'last_activity': 'K',
+    'last_reminder': 'L',
+    'visits_in_cycle': 'M',
+    'free_visit_available': 'N',
+}
+
+DEFAULT_MASTER = ("Администратор", "+7-999-000-00-00")
+
 
 def _load_credentials():
     """Креды сервисного аккаунта.
@@ -76,14 +93,14 @@ _verified_guests = set()
 def _vk_to_str(vk_id):
     try:
         return str(int(float(vk_id)))
-    except:
+    except (TypeError, ValueError):
         return str(vk_id)
 
 def _vk_with_dot(vk_id):
     vk_str = _vk_to_str(vk_id)
     try:
         return str(float(vk_str))
-    except:
+    except (TypeError, ValueError):
         return vk_str
 
 def invalidate_cache(vk_id=None):
@@ -150,48 +167,42 @@ def update_guest_sheet(vk_id, **kwargs):
         if row_num is None:
             logger.warning(f"⚠️ Строка для vk_id {vk_id} не найдена. Попробуйте вызвать ensure_guest_in_sheet")
             return
-        # Собираем обновления в список (batch_update)
-        updates = []
-        if 'visits' in kwargs:
-            updates.append({'range': f'F{row_num}', 'values': [[kwargs['visits']]]})
-            logger.debug(f"   Обновлены визиты: {kwargs['visits']}")
-        if 'level' in kwargs:
-            updates.append({'range': f'G{row_num}', 'values': [[kwargs['level']]]})
-        if 'status' in kwargs:
-            updates.append({'range': f'H{row_num}', 'values': [[kwargs['status']]]})
-        if 'updated_at' in kwargs:
-            updates.append({'range': f'I{row_num}', 'values': [[kwargs['updated_at']]]})
-        if 'phone' in kwargs:
-            updates.append({'range': f'C{row_num}', 'values': [[kwargs['phone']]]})
-        if 'birth' in kwargs:
-            updates.append({'range': f'D{row_num}', 'values': [[kwargs['birth']]]})
-        if 'registration_step' in kwargs:
-            updates.append({'range': f'J{row_num}', 'values': [[kwargs['registration_step']]]})
-        if 'last_activity' in kwargs:
-            updates.append({'range': f'K{row_num}', 'values': [[kwargs['last_activity']]]})
-        if 'last_reminder' in kwargs:
-            updates.append({'range': f'L{row_num}', 'values': [[kwargs['last_reminder']]]})
-        if 'visits_in_cycle' in kwargs:
-            updates.append({'range': f'M{row_num}', 'values': [[kwargs['visits_in_cycle']]]})
-        if 'free_visit_available' in kwargs:
-            updates.append({'range': f'N{row_num}', 'values': [[kwargs['free_visit_available']]]})
-        if updates:
-            get_sheet().batch_update(updates)
+
+        unknown = set(kwargs) - set(GUEST_COLUMNS)
+        if unknown:
+            logger.warning(f"⚠️ Нет колонки в таблице для полей: {', '.join(sorted(unknown))}")
+
+        updates = [
+            {'range': f'{GUEST_COLUMNS[field]}{row_num}', 'values': [[value]]}
+            for field, value in kwargs.items()
+            if field in GUEST_COLUMNS
+        ]
+        if not updates:
+            return
+        get_sheet().batch_update(updates)
         logger.info(f"✅ Обновлены данные для гостя {vk_id} в строке {row_num}")
     except Exception as e:
         logger.error(f"Ошибка обновления Google Sheets: {e}")
 
 def get_today_master():
     try:
-        master_sheet = get_spreadsheet().worksheet("Мастера")
-        records = master_sheet.get_all_records()
-        today_day = datetime.now().day
-        for row in records:
-            if int(row.get('День', -1)) == today_day:
-                return row.get('Имя', 'Мастер'), row.get('Телефон', 'Не указан')
+        records = get_spreadsheet().worksheet("Мастера").get_all_records()
     except Exception as e:
         logger.error(f"Ошибка при получении мастера: {e}")
-    return "Администратор", "+7-999-000-00-00"
+        return DEFAULT_MASTER
+
+    today_day = datetime.now().day
+    for row in records:
+        try:
+            day = int(row.get('День', -1))
+        except (TypeError, ValueError):
+            # Одна строка с нечисловым «Днём» не должна отменять весь перебор
+            continue
+        if day == today_day:
+            return row.get('Имя', 'Мастер'), row.get('Телефон', 'Не указан')
+
+    logger.warning(f"⚠️ В листе «Мастера» нет строки на {today_day} число")
+    return DEFAULT_MASTER
 
 def _read_guest_row(sheet, row_num):
     """Первые четыре колонки строки, дополненные до полной длины:
