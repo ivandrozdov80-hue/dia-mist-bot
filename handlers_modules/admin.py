@@ -44,7 +44,7 @@ def handle_status(vk, user_id, send_func):
 
     # 3. Google Sheets
     try:
-        gs.sheet.row_values(1)
+        gs.get_sheet().row_values(1)
         lines.append("✅ Google Sheets: доступно")
     except Exception as e:
         lines.append(f"❌ Google Sheets: ошибка ({str(e)[:50]})")
