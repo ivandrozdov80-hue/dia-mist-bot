@@ -283,3 +283,38 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         return True
 
     return False
+
+
+# ===== ПРОВЕРКА СОГЛАСИЯ ДЛЯ СТАРЫХ ГОСТЕЙ =====
+def ensure_agreement(vk, user_id, guest, send_func):
+    """
+    Проверяет, дал ли гость согласие на обработку ПД.
+    Если нет – показывает согласие и возвращает False.
+    Если да – возвращает True.
+    """
+    if not guest:
+        return True
+    
+    # Проверяем agreement_given (индекс 14)
+    agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
+    
+    if agreement_given == 1:
+        return True  # Согласие уже есть
+    
+    # Согласия нет – показываем
+    send_func(
+        user_id,
+        AGREEMENT_TEXT,
+        keyboard=get_agreement_keyboard()
+    )
+    return False  # Гость ещё не дал согласие
+
+
+__all__ = [
+    'handle_new_guest',
+    'handle_registration_step',
+    'get_agreement_keyboard',
+    'AGREEMENT_TEXT',
+    'PHONE_REQUEST_MESSAGES',
+    'ensure_agreement'
+]

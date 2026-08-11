@@ -94,9 +94,12 @@ def handle_stat(vk, user_id, send_func):
     lines.append(f"🔴 Неактивных: {inactive}")
 
     # Всего достижений у всех гостей
-    db.cursor.execute("SELECT COUNT(*) FROM user_achievements")
-    ach_total = db.cursor.fetchone()[0]
-    lines.append(f"🏆 Всего выдано достижений: {ach_total}")
+    try:
+        db.cursor.execute("SELECT COUNT(*) FROM user_achievements")
+        ach_total = db.cursor.fetchone()[0]
+        lines.append(f"🏆 Всего выдано достижений: {ach_total}")
+    except:
+        lines.append("🏆 Таблица достижений: не найдена")
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
