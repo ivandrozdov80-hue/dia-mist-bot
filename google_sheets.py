@@ -131,7 +131,6 @@ def ensure_guest_in_sheet(vk_id, guest_data):
         if row_num is None:
             now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             vk_str = _vk_to_str(vk_id)
-            # 15 колонок
             row = [
                 vk_str,
                 guest_data[1] or '',
