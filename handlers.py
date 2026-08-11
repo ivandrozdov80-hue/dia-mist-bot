@@ -409,7 +409,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
             "   /birth ДД.ММ.ГГГГ – указать дату рождения\n\n"
             "👑 Администратору:\n"
             "   /newvisit [id], /create_raffle, /draw\n"
-            "   /status, /stat, /notify\n\n"
+            "   /status, /stat, /notify, /delete_guest [id]\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Теперь ты знаешь всё! Жми на кнопки\n"
             "и наслаждайся! 🧞💨\n"
