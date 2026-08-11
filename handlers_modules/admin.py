@@ -20,7 +20,7 @@ def handle_admin_draw(vk, user_id, send_func):
     handle_draw(vk, user_id, send_func)
 
 
-# ===== НОВОЕ: /status (health-check) =====
+# ===== /status (health-check) =====
 def handle_status(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
         send_func(user_id, "⛔ Только для администраторов.")
@@ -66,7 +66,7 @@ def handle_status(vk, user_id, send_func):
     send_func(user_id, "\n".join(lines), keyboard=None)
 
 
-# ===== НОВОЕ: /stat (статистика) =====
+# ===== /stat (статистика) =====
 def handle_stat(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
         send_func(user_id, "⛔ Только для администраторов.")
@@ -101,3 +101,72 @@ def handle_stat(vk, user_id, send_func):
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     send_func(user_id, "\n".join(lines), keyboard=None)
+
+
+# ===== УДАЛЕНИЕ ГОСТЯ =====
+def handle_delete_guest(vk, user_id, message, send_func):
+    """
+    Удаление гостя из базы данных и Google Sheets.
+    Использование: /delete_guest [ID_гостя]
+    Пример: /delete_guest 123456789
+    """
+    if user_id not in ADMIN_IDS:
+        send_func(user_id, "⛔ Только для администраторов.")
+        return
+
+    parts = message.split()
+    if len(parts) != 2:
+        send_func(
+            user_id,
+            "❌ Используй: /delete_guest [ID_гостя]\n"
+            "Например: /delete_guest 123456789"
+        )
+        return
+
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        send_func(user_id, "❌ ID должен быть числом.")
+        return
+
+    # Проверяем, существует ли гость
+    guest = db.get_guest(target_id)
+    if not guest:
+        send_func(user_id, f"❌ Гость с ID {target_id} не найден.")
+        return
+
+    guest_name = guest[1] if guest[1] else "Без имени"
+
+    # Удаляем из SQLite
+    try:
+        db.cursor.execute("DELETE FROM guests WHERE vk_id=?", (target_id,))
+        db.conn.commit()
+        logger.info(f"✅ Гость {target_id} ({guest_name}) удалён из SQLite")
+    except Exception as e:
+        logger.error(f"Ошибка удаления из SQLite: {e}")
+        send_func(user_id, f"❌ Ошибка при удалении из базы: {e}")
+        return
+
+    # Удаляем из Google Sheets
+    try:
+        row_num = gs.find_row_by_vk(target_id)
+        if row_num:
+            gs.sheet.delete_rows(row_num)
+            gs.invalidate_cache(target_id)
+            send_func(user_id, f"✅ Гость {target_id} удалён из Google таблицы.")
+            logger.info(f"✅ Гость {target_id} удалён из Google Sheets (строка {row_num})")
+        else:
+            send_func(user_id, f"⚠️ Гость удалён из базы, но не найден в Google таблице.")
+    except Exception as e:
+        logger.error(f"Ошибка удаления из Google Sheets: {e}")
+        send_func(user_id, f"⚠️ Гость удалён из базы, но ошибка при удалении из Google Sheets: {e}")
+
+    send_func(
+        user_id,
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🗑️ ГОСТЬ УДАЛЁН\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"✅ ID: {target_id}\n"
+        f"👤 Имя: {guest_name}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )

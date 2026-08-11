@@ -64,6 +64,35 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     if handle_review_response(vk, user_id, guest, message, send_func):
         return True
 
+    # ===== ОБРАБОТКА СОГЛАСИЯ НА ПД =====
+    if message == '✅ Принимаю':
+        db.update_guest(user_id, agreement_given=1)
+        gs.update_guest_sheet(user_id, agreement_given=1)
+        # Отправляем приветствие и просим телефон
+        name = guest[1] if guest[1] else "Гость"
+        from handlers_modules.registration import PHONE_REQUEST_MESSAGES
+        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
+        send_func(user_id, phone_text, keyboard=None)
+        return True
+
+    if message == '❌ Отказываюсь':
+        text = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🧞 ОЙ, А Я УЖЕ ХОТЕЛ НАКОЛДОВАТЬ ТЕБЕ ПЛЮШКИ…\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Без твоего согласия я не могу обрабатывать данные,\n"
+            "а значит — не могу начислять тебе визиты,\n"
+            "дарить бонусы и звать на розыгрыши.\n\n"
+            "Это как пытаться заварить чай без чайника — ну никак! 😈\n\n"
+            "Но если хочешь просто задать вопрос администратору\n"
+            "или узнать что‑то о заведении — напиши создателю:\n"
+            "https://vk.com/im?sel=57703251\n\n"
+            "Он не такой волшебный, как я, но отвечает быстрее.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
+        return True
+
     # ===== АДМИН-МЕНЮ =====
     if message == '📊 Админ-меню' and user_id in ADMIN_IDS:
         send_func(
@@ -231,6 +260,12 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
 
     if low_msg == '/draw' and user_id in ADMIN_IDS:
         handle_admin_draw(vk, user_id, send_func)
+        return True
+
+        # ===== УДАЛЕНИЕ ГОСТЯ (только для админов) =====
+    if low_msg.startswith('/delete_guest') and user_id in ADMIN_IDS:
+        from handlers_modules.admin import handle_delete_guest
+        handle_delete_guest(vk, user_id, message, send_func)
         return True
 
     # ===== МАССОВАЯ РАССЫЛКА =====

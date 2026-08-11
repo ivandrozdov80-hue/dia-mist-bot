@@ -34,6 +34,7 @@ def get_admin_menu_keyboard():
     keyboard.add_line()
     keyboard.add_button('🔍 Статус', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('👥 Все гости', color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button('🗑️ Удалить гостя', color=VkKeyboardColor.NEGATIVE)  # ← НОВАЯ КНОПКА
     keyboard.add_line()
     keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY)
     return keyboard
