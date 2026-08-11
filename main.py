@@ -13,7 +13,6 @@ import scheduler
 scheduler_started = False
 _last_msg_time = {}
 
-# test update
 def run_bot():
     global scheduler_started
     while True:
@@ -27,7 +26,7 @@ def run_bot():
 
             logger.info("✅ Джинн запущен, Господин! Жду сообщений...")
 
-            # Единая функция отправки сообщений – имена параметров совпадают с вызовами
+            # Единая функция отправки сообщений
             def send_func(uid, txt, attachment=None, keyboard=None):
                 return handlers.send_message(vk, uid, txt, attachment, keyboard)
 
@@ -56,7 +55,10 @@ def run_bot():
                         if not message or len(message) > MAX_MESSAGE_LENGTH:
                             continue
 
+                        # ===== ПОЛУЧАЕМ ГОСТЯ =====
                         guest = db.get_guest(user_id)
+                        
+                        # ===== НОВЫЙ ГОСТЬ =====
                         if not guest:
                             try:
                                 user_info = vk.users.get(user_ids=user_id)[0]
@@ -72,13 +74,22 @@ def run_bot():
                             handlers.handle_new_guest(vk, user_id, guest, send_func)
                             continue
 
+                        # ===== ОБНОВЛЯЕМ АКТИВНОСТЬ =====
                         db.update_activity(user_id)
                         now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                         gs.update_guest_sheet(user_id, last_activity=now_str)
                         gs.ensure_guest_in_sheet(user_id, guest)
 
-                        if not handlers.handle_registration_step(vk, user_id, guest, message, send_func):
-                            handlers.handle_main_menu(vk, user_id, guest, message, send_func)
+                        # ===== ОБРАБОТКА РЕГИСТРАЦИИ =====
+                        if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
+                            # Регистрация обработана, обновляем guest
+                            guest = db.get_guest(user_id)
+                            continue
+
+                        # ===== ГЛАВНОЕ МЕНЮ =====
+                        # КРИТИЧЕСКИ ВАЖНО: обновляем guest перед входом в меню
+                        guest = db.get_guest(user_id)
+                        handlers.handle_main_menu(vk, user_id, guest, message, send_func)
 
                     except Exception as e:
                         logger.error(f"Ошибка при обработке сообщения: {e}")
