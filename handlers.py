@@ -89,6 +89,8 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     if message == '✅ Принимаю':
         db.update_guest(user_id, agreement_given=1)
         gs.update_guest_sheet(user_id, agreement_given=1)
+        # Обновляем guest в памяти
+        guest = db.get_guest(user_id)
         # Отправляем приветствие и просим телефон
         name = guest[1] if guest[1] else "Гость"
         from handlers_modules.registration import PHONE_REQUEST_MESSAGES
