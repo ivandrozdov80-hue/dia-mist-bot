@@ -1,30 +1,17 @@
-# utils.py
-import json
-import database as db
-from config import logger
-
-def update_command_count(user_id, command_name):
-    guest = db.get_guest(user_id)
-    if guest and len(guest) > 16:
-        try:
-            command_counts = json.loads(guest[16] if guest[16] else '{}')
-            command_counts[command_name] = command_counts.get(command_name, 0) + 1
-            db.update_guest(user_id, command_counts=json.dumps(command_counts))
-        except Exception as e:
-            logger.error(f"Ошибка обновления счётчика команд для {user_id}: {e}")
-
-def update_message_count(user_id, guest):
-    if guest and len(guest) > 14:
-        try:
-            total_messages = int(guest[14]) if guest[14] is not None else 0
-            db.update_guest(user_id, total_messages=total_messages + 1)
-        except Exception as e:
-            logger.error(f"Ошибка обновления счётчика сообщений для {user_id}: {e}")
-
-def update_raffle_participation(user_id, guest):
-    if guest and len(guest) > 17:
-        try:
-            participations = int(guest[17]) if guest[17] is not None else 0
-            db.update_guest(user_id, raffle_participations=participations + 1)
-        except Exception as e:
-            logger.error(f"Ошибка обновления участия в розыгрыше для {user_id}: {e}")
+# handlers_modules/__init__.py
+from .registration import handle_new_guest, handle_registration_step, ensure_agreement
+from .profile import handle_profile
+from .visits import (
+    handle_visit_button,
+    handle_visit_request,
+    handle_visit_manual,
+    handle_admin_confirm,
+    handle_admin_reject
+)
+from .raffle import handle_raffle_info, handle_raffle_participate
+from .admin import handle_admin_newvisit, handle_admin_create_raffle, handle_admin_draw, handle_status, handle_stat, handle_delete_guest
+from .greetings import handle_greeting, handle_emoji_short, handle_random_joke, handle_sticker
+from .promo import handle_promo
+from .help import handle_help
+from .utils import update_command_count, update_message_count, update_raffle_participation
+from .reviews import handle_review_response, ask_review

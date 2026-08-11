@@ -2,7 +2,7 @@
 import database as db
 import google_sheets as gs
 from config import ADMIN_IDS, logger
-from .utils import update_command_count
+from handlers_modules.utils import update_command_count
 from admin_commands import handle_newvisit, handle_create_raffle, handle_draw
 from datetime import datetime, timedelta
 
@@ -44,7 +44,7 @@ def handle_status(vk, user_id, send_func):
 
     # 3. Google Sheets
     try:
-        gs.get_sheet().row_values(1)
+        gs.sheet.row_values(1)
         lines.append("✅ Google Sheets: доступно")
     except Exception as e:
         lines.append(f"❌ Google Sheets: ошибка ({str(e)[:50]})")
