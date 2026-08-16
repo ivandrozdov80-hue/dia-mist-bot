@@ -93,33 +93,16 @@ def run_bot():
                         gs.ensure_guest_in_sheet(user_id, guest)
 
                         # ============================================================
-                        # 4. ПРОВЕРЯЕМ ДАННЫЕ ГОСТЯ (СВЕЖИЕ!)
+                        # 4. ПОЛУЧАЕМ СВЕЖИЕ ДАННЫЕ ГОСТЯ
                         # ============================================================
-                        guest = db.get_guest(user_id)  # <-- ОБЯЗАТЕЛЬНО СВЕЖИЙ!
+                        guest = db.get_guest(user_id)
                         agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
                         has_phone = guest[2] is not None and guest[2] != ''
 
-                        # ============================================================
-                        # 5. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ И ВЫХОДИМ
-                        # ============================================================
-                        if agreement_given != 1:
-                            logger.info(f"⚠️ Гость {user_id} не дал согласие, показываем")
-                            if has_phone:
-                                send_func(
-                                    user_id,
-                                    AGREEMENT_TEXT_OLD,
-                                    keyboard=get_agreement_keyboard()
-                                )
-                            else:
-                                send_func(
-                                    user_id,
-                                    AGREEMENT_TEXT_NEW,
-                                    keyboard=get_agreement_keyboard()
-                                )
-                            continue  # <-- ВАЖНО: ВЫХОДИМ, НЕ ИДЁМ ДАЛЬШЕ
+                        logger.info(f"📊 Статус: user={user_id}, agreement={agreement_given}, phone={has_phone}")
 
                         # ============================================================
-                        # 6. ОБРАБОТКА КНОПОК СОГЛАСИЯ
+                        # 5. ОБРАБОТКА КНОПОК СОГЛАСИЯ (СНАЧАЛА!)
                         # ============================================================
                         if message == '✅ Принимаю':
                             logger.info(f"✅ Гость {user_id} принял согласие")
@@ -155,6 +138,25 @@ def run_bot():
                                 "━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             )
                             send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
+                            continue
+
+                        # ============================================================
+                        # 6. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ (ТОЛЬКО ПОСЛЕ ОБРАБОТКИ КНОПОК!)
+                        # ============================================================
+                        if agreement_given != 1:
+                            logger.info(f"⚠️ Гость {user_id} не дал согласие, показываем")
+                            if has_phone:
+                                send_func(
+                                    user_id,
+                                    AGREEMENT_TEXT_OLD,
+                                    keyboard=get_agreement_keyboard()
+                                )
+                            else:
+                                send_func(
+                                    user_id,
+                                    AGREEMENT_TEXT_NEW,
+                                    keyboard=get_agreement_keyboard()
+                                )
                             continue
 
                         # ============================================================
