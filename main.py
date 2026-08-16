@@ -9,6 +9,7 @@ import database as db
 import google_sheets as gs
 import handlers
 import scheduler
+import keyboards as kb  # <-- ДОБАВЛЯЕМ ЭТУ СТРОКУ
 
 scheduler_started = False
 _last_msg_time = {}
@@ -88,16 +89,15 @@ def run_bot():
                         # КРИТИЧЕСКИ ВАЖНО: ОБНОВЛЯЕМ guest ПЕРЕД КАЖДЫМ ВХОДОМ В МЕНЮ
                         guest = db.get_guest(user_id)
                         
-                        # Проверяем, не нажал ли пользователь кнопку согласия
-                        # Если да - обрабатываем и обновляем guest
+                        # ===== ОБРАБОТКА СОГЛАСИЯ (В main.py, чтобы обновлять guest) =====
                         if message == '✅ Принимаю':
                             db.update_guest(user_id, agreement_given=1)
                             gs.update_guest_sheet(user_id, agreement_given=1)
-                            guest = db.get_guest(user_id)  # <-- ОБНОВЛЯЕМ СРАЗУ
+                            guest = db.get_guest(user_id)
                             from handlers_modules.registration import PHONE_REQUEST_MESSAGES
                             phone_text = random.choice(PHONE_REQUEST_MESSAGES)
                             send_func(user_id, phone_text, keyboard=None)
-                            continue  # <-- ВЫХОДИМ, ЧТОБЫ НЕ ИДТИ В handle_main_menu
+                            continue
 
                         if message == '❌ Отказываюсь':
                             text = (
@@ -115,7 +115,7 @@ def run_bot():
                                 "━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             )
                             send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
-                            continue  # <-- ВЫХОДИМ
+                            continue
 
                         # Теперь вызываем главное меню со свежим guest
                         handlers.handle_main_menu(vk, user_id, guest, message, send_func)
