@@ -11,7 +11,6 @@ import handlers
 import scheduler
 import keyboards as kb
 
-# Импортируем функцию из registration
 from handlers_modules.registration import get_agreement_keyboard, AGREEMENT_TEXT_OLD, AGREEMENT_TEXT_NEW, PHONE_REQUEST_MESSAGES
 
 scheduler_started = False
@@ -57,10 +56,14 @@ def run_bot():
                         if not message or len(message) > MAX_MESSAGE_LENGTH:
                             continue
 
-                        # ===== ПОЛУЧАЕМ ГОСТЯ ИЗ БАЗЫ =====
+                        # ============================================================
+                        # 1. ПОЛУЧАЕМ ГОСТЯ ИЗ БАЗЫ
+                        # ============================================================
                         guest = db.get_guest(user_id)
                         
-                        # ===== НОВЫЙ ГОСТЬ =====
+                        # ============================================================
+                        # 2. НОВЫЙ ГОСТЬ
+                        # ============================================================
                         if not guest:
                             try:
                                 user_info = vk.users.get(user_ids=user_id)[0]
@@ -74,7 +77,6 @@ def run_bot():
                             now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                             gs.update_guest_sheet(user_id, last_activity=now_str)
                             
-                            # ===== НОВЫЙ ГОСТЬ: показываем согласие С РЕГИСТРАЦИЕЙ =====
                             send_func(
                                 user_id,
                                 AGREEMENT_TEXT_NEW,
@@ -82,28 +84,36 @@ def run_bot():
                             )
                             continue
 
-                        # ===== ОБНОВЛЯЕМ АКТИВНОСТЬ =====
+                        # ============================================================
+                        # 3. ОБНОВЛЯЕМ АКТИВНОСТЬ
+                        # ============================================================
                         db.update_activity(user_id)
                         now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                         gs.update_guest_sheet(user_id, last_activity=now_str)
                         gs.ensure_guest_in_sheet(user_id, guest)
 
-                        # ===== ПРОВЕРЯЕМ СОГЛАСИЕ =====
+                        # ============================================================
+                        # 4. ПРОВЕРЯЕМ ДАННЫЕ ГОСТЯ
+                        # ============================================================
                         agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
                         has_phone = guest[2] is not None and guest[2] != ''
 
-                        # ===== ОБРАБОТКА КНОПОК СОГЛАСИЯ =====
+                        logger.info(f"📊 Статус гостя {user_id}: agreement={agreement_given}, phone={has_phone}")
+
+                        # ============================================================
+                        # 5. ОБРАБОТКА КНОПОК СОГЛАСИЯ
+                        # ============================================================
                         if message == '✅ Принимаю':
+                            logger.info(f"✅ Гость {user_id} принял согласие")
                             db.update_guest(user_id, agreement_given=1)
                             gs.update_guest_sheet(user_id, agreement_given=1)
-                            guest = db.get_guest(user_id)
+                            guest = db.get_guest(user_id)  # <-- ОБНОВЛЯЕМ!
+                            agreement_given = 1  # <-- ОБНОВЛЯЕМ ПЕРЕМЕННУЮ!
                             
-                            # Если у гостя нет телефона - начинаем регистрацию
-                            if not has_phone:
+                            if not guest[2]:
                                 phone_text = random.choice(PHONE_REQUEST_MESSAGES)
                                 send_func(user_id, phone_text, keyboard=None)
                             else:
-                                # Телефон есть - просто показываем меню
                                 send_func(
                                     user_id,
                                     "✅ Согласие принято! Теперь ты можешь пользоваться всеми функциями бота.",
@@ -112,6 +122,7 @@ def run_bot():
                             continue
 
                         if message == '❌ Отказываюсь':
+                            logger.info(f"❌ Гость {user_id} отказался от согласия")
                             text = (
                                 "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                                 "🧞 ОЙ, А Я УЖЕ ХОТЕЛ НАКОЛДОВАТЬ ТЕБЕ ПЛЮШКИ…\n"
@@ -129,9 +140,11 @@ def run_bot():
                             send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
                             continue
 
-                        # ===== ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ =====
+                        # ============================================================
+                        # 6. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ
+                        # ============================================================
                         if agreement_given != 1:
-                            # Для старых гостей (с телефоном) - простое согласие
+                            logger.info(f"⚠️ Гость {user_id} не дал согласие, показываем")
                             if has_phone:
                                 send_func(
                                     user_id,
@@ -139,7 +152,6 @@ def run_bot():
                                     keyboard=get_agreement_keyboard()
                                 )
                             else:
-                                # Для новых (без телефона) - согласие с регистрацией
                                 send_func(
                                     user_id,
                                     AGREEMENT_TEXT_NEW,
@@ -147,18 +159,24 @@ def run_bot():
                                 )
                             continue
 
-                        # ===== ОБРАБОТКА РЕГИСТРАЦИИ (ТОЛЬКО ДЛЯ НОВЫХ) =====
+                        # ============================================================
+                        # 7. ОБРАБОТКА РЕГИСТРАЦИИ (ТОЛЬКО ДЛЯ НОВЫХ)
+                        # ============================================================
                         if not has_phone:
                             if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
                                 guest = db.get_guest(user_id)
                                 continue
 
-                        # ===== ГЛАВНОЕ МЕНЮ =====
-                        guest = db.get_guest(user_id)
+                        # ============================================================
+                        # 8. ГЛАВНОЕ МЕНЮ - ОБЯЗАТЕЛЬНО ОБНОВЛЯЕМ guest!
+                        # ============================================================
+                        guest = db.get_guest(user_id)  # <-- КРИТИЧЕСКИ ВАЖНО!
                         handlers.handle_main_menu(vk, user_id, guest, message, send_func)
 
                     except Exception as e:
                         logger.error(f"Ошибка при обработке сообщения: {e}")
+                        import traceback
+                        traceback.print_exc()
 
         except Exception as e:
             logger.error(f"Ошибка подключения к VK: {e}")

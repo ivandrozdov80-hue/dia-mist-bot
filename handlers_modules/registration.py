@@ -9,7 +9,7 @@ import utils
 from config import logger
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-# ===== ТЕКСТ СОГЛАСИЯ ДЛЯ СТАРЫХ ГОСТЕЙ (УЖЕ ЕСТЬ В БАЗЕ) =====
+# ===== ТЕКСТ СОГЛАСИЯ ДЛЯ СТАРЫХ ГОСТЕЙ =====
 AGREEMENT_TEXT_OLD = (
     "🔒 **СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ**\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -143,9 +143,7 @@ def get_agreement_keyboard():
     return keyboard
 
 def handle_new_guest(vk, user_id, guest, send_func):
-    """Приветствие нового гостя и запрос согласия на ПД"""
     name = guest[1] if guest[1] else "Гость"
-    # Для новых гостей всегда показываем согласие с регистрацией
     send_func(
         user_id,
         AGREEMENT_TEXT_NEW,
@@ -153,7 +151,6 @@ def handle_new_guest(vk, user_id, guest, send_func):
     )
 
 def handle_registration_step(vk, user_id, guest, message, send_func):
-    """Обработка регистрации ТОЛЬКО для НОВЫХ гостей (без телефона)"""
     reg_step_raw = guest[9] if len(guest) > 9 else 0
     try:
         reg_step = int(reg_step_raw) if reg_step_raw is not None else 0
@@ -162,7 +159,6 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
 
     phone = guest[2] if len(guest) > 2 else ''
     
-    # Если у гостя уже есть телефон - он зарегистрирован, выходим
     if phone:
         return False
 
@@ -171,7 +167,6 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         db.conn.commit()
         gs.update_guest_sheet(user_id, registration_step=1)
         guest = db.get_guest(user_id)
-        name = guest[1] if guest[1] else "Гость"
         phone_text = random.choice(PHONE_REQUEST_MESSAGES)
         send_func(user_id, phone_text, keyboard=None)
         return True
@@ -181,7 +176,6 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         db.conn.commit()
         gs.update_guest_sheet(user_id, registration_step=1)
         guest = db.get_guest(user_id)
-        name = guest[1] if guest[1] else "Гость"
         phone_text = random.choice(PHONE_REQUEST_MESSAGES)
         send_func(user_id, phone_text, keyboard=None)
         return True
@@ -315,13 +309,11 @@ def ensure_agreement(vk, user_id, guest, send_func):
     if not guest:
         return True
     
-    # Проверяем agreement_given (индекс 14)
     agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
     
     if agreement_given == 1:
-        return True  # Согласие уже есть
+        return True
     
-    # Согласия нет – показываем (определяем какой текст)
     has_phone = guest[2] is not None and guest[2] != ''
     if has_phone:
         send_func(user_id, AGREEMENT_TEXT_OLD, keyboard=get_agreement_keyboard())

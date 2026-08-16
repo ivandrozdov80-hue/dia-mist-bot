@@ -4,7 +4,6 @@ from config import ADMIN_IDS
 
 
 def get_main_keyboard(user_id=None):
-    """Главное меню. Если пользователь администратор – показывает админ-кнопки."""
     keyboard = VkKeyboard(one_time=False)
     
     keyboard.add_button('👤 Профиль', color=VkKeyboardColor.PRIMARY)
@@ -25,7 +24,6 @@ def get_main_keyboard(user_id=None):
 
 
 def get_admin_menu_keyboard():
-    """Администраторское меню (скрытое от гостей)"""
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button('📨 Рассылка', color=VkKeyboardColor.POSITIVE)
     keyboard.add_button('📊 Статистика', color=VkKeyboardColor.PRIMARY)
@@ -39,7 +37,6 @@ def get_admin_menu_keyboard():
 
 
 def get_agreement_keyboard():
-    """Клавиатура для согласия на обработку ПД"""
     keyboard = VkKeyboard(one_time=True)
     keyboard.add_button('✅ Принимаю', color=VkKeyboardColor.POSITIVE)
     keyboard.add_button('❌ Отказываюсь', color=VkKeyboardColor.NEGATIVE)
