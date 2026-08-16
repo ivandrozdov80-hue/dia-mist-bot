@@ -118,18 +118,17 @@ def get_agreement_keyboard():
     return keyboard
 
 def handle_new_guest(vk, user_id, guest, send_func):
+    """Приветствие нового гостя и запрос согласия на ПД"""
     name = guest[1] if guest[1] else "Гость"
-    if len(guest) > 14 and guest[14] == 1:
-        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
-        send_func(user_id, phone_text, keyboard=None)
-    else:
-        send_func(
-            user_id,
-            AGREEMENT_TEXT,
-            keyboard=get_agreement_keyboard()
-        )
+    # Для новых гостей всегда показываем согласие
+    send_func(
+        user_id,
+        AGREEMENT_TEXT,
+        keyboard=get_agreement_keyboard()
+    )
 
 def handle_registration_step(vk, user_id, guest, message, send_func):
+    """Обработка регистрации ТОЛЬКО для НОВЫХ гостей (без телефона)"""
     reg_step_raw = guest[9] if len(guest) > 9 else 0
     try:
         reg_step = int(reg_step_raw) if reg_step_raw is not None else 0
@@ -137,6 +136,10 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         reg_step = 0
 
     phone = guest[2] if len(guest) > 2 else ''
+    
+    # Если у гостя уже есть телефон - он зарегистрирован, выходим
+    if phone:
+        return False
 
     if reg_step >= 3 and not phone:
         db.cursor.execute("UPDATE guests SET registration_step=1 WHERE vk_id=?", (user_id,))
@@ -279,17 +282,27 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
 
 
 def ensure_agreement(vk, user_id, guest, send_func):
+    """
+    Проверяет, дал ли гость согласие на обработку ПД.
+    Если нет – показывает согласие и возвращает False.
+    Если да – возвращает True.
+    """
     if not guest:
         return True
+    
+    # Проверяем agreement_given (индекс 14)
     agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
+    
     if agreement_given == 1:
-        return True
+        return True  # Согласие уже есть
+    
+    # Согласия нет – показываем
     send_func(
         user_id,
         AGREEMENT_TEXT,
         keyboard=get_agreement_keyboard()
     )
-    return False
+    return False  # Гость ещё не дал согласие
 
 
 __all__ = [
