@@ -4,10 +4,8 @@ from config import ADMIN_IDS
 
 
 def get_main_keyboard(user_id=None):
-    """Главное меню. Если пользователь администратор – показывает админ-кнопки."""
     keyboard = VkKeyboard(one_time=False)
     
-    # Основные кнопки (для всех)
     keyboard.add_button('👤 Профиль', color=VkKeyboardColor.PRIMARY)
     keyboard.add_button('✅ Визит', color=VkKeyboardColor.POSITIVE)
     keyboard.add_button('🔥 Акции', color=VkKeyboardColor.SECONDARY)
@@ -18,7 +16,6 @@ def get_main_keyboard(user_id=None):
     keyboard.add_button('✍️ Создатель', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('❓ Помощь', color=VkKeyboardColor.SECONDARY)
     
-    # Дополнительные кнопки для администратора
     if user_id in ADMIN_IDS:
         keyboard.add_line()
         keyboard.add_button('📊 Админ-меню', color=VkKeyboardColor.PRIMARY)
@@ -27,13 +24,13 @@ def get_main_keyboard(user_id=None):
 
 
 def get_admin_menu_keyboard():
-    """Администраторское меню (скрытое от гостей)"""
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button('📨 Рассылка', color=VkKeyboardColor.POSITIVE)
     keyboard.add_button('📊 Статистика', color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     keyboard.add_button('🔍 Статус', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('👥 Все гости', color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button('🗑️ Удалить гостя', color=VkKeyboardColor.NEGATIVE)
     keyboard.add_line()
     keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY)
     return keyboard

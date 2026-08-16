@@ -13,7 +13,6 @@ import scheduler
 scheduler_started = False
 _last_msg_time = {}
 
-# test update
 def run_bot():
     global scheduler_started
     while True:
@@ -27,7 +26,6 @@ def run_bot():
 
             logger.info("✅ Джинн запущен, Господин! Жду сообщений...")
 
-            # Единая функция отправки сообщений – имена параметров совпадают с вызовами
             def send_func(uid, txt, attachment=None, keyboard=None):
                 return handlers.send_message(vk, uid, txt, attachment, keyboard)
 
@@ -41,7 +39,6 @@ def run_bot():
                         user_id = event.user_id
                         message = event.text.strip()
 
-                        # Антиспам
                         now = time.time()
                         if user_id in _last_msg_time:
                             if now - _last_msg_time[user_id] < 1.0:
@@ -57,6 +54,7 @@ def run_bot():
                             continue
 
                         guest = db.get_guest(user_id)
+                        
                         if not guest:
                             try:
                                 user_info = vk.users.get(user_ids=user_id)[0]
@@ -77,8 +75,12 @@ def run_bot():
                         gs.update_guest_sheet(user_id, last_activity=now_str)
                         gs.ensure_guest_in_sheet(user_id, guest)
 
-                        if not handlers.handle_registration_step(vk, user_id, guest, message, send_func):
-                            handlers.handle_main_menu(vk, user_id, guest, message, send_func)
+                        if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
+                            guest = db.get_guest(user_id)
+                            continue
+
+                        guest = db.get_guest(user_id)
+                        handlers.handle_main_menu(vk, user_id, guest, message, send_func)
 
                     except Exception as e:
                         logger.error(f"Ошибка при обработке сообщения: {e}")

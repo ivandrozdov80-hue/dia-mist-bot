@@ -34,7 +34,8 @@ def init_db():
         cycles_completed INTEGER DEFAULT 0,
         wrong_phone_attempts INTEGER DEFAULT 0,
         last_request_time TEXT,
-        awaiting_review INTEGER DEFAULT 0
+        awaiting_review INTEGER DEFAULT 0,
+        agreement_given INTEGER DEFAULT 0
     )
     ''')
 
@@ -53,7 +54,8 @@ def init_db():
         'cycles_completed': 'INTEGER DEFAULT 0',
         'wrong_phone_attempts': 'INTEGER DEFAULT 0',
         'last_request_time': 'TEXT',
-        'awaiting_review': 'INTEGER DEFAULT 0'
+        'awaiting_review': 'INTEGER DEFAULT 0',
+        'agreement_given': 'INTEGER DEFAULT 0'
     }
     for col, col_type in columns_to_add.items():
         try:

@@ -2,7 +2,7 @@
 import database as db
 import google_sheets as gs
 from config import ADMIN_IDS, logger
-from .utils import update_command_count
+from handlers_modules.utils import update_command_count
 from admin_commands import handle_newvisit, handle_create_raffle, handle_draw
 from datetime import datetime, timedelta
 
@@ -20,7 +20,6 @@ def handle_admin_draw(vk, user_id, send_func):
     handle_draw(vk, user_id, send_func)
 
 
-# ===== НОВОЕ: /status (health-check) =====
 def handle_status(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
         send_func(user_id, "⛔ Только для администраторов.")
@@ -28,35 +27,30 @@ def handle_status(vk, user_id, send_func):
 
     lines = ["━━━━━━━━━━━━━━━━━━━━━━━━━━", "🟢 СТАТУС БОТА", "━━━━━━━━━━━━━━━━━━━━━━━━━━", ""]
 
-    # 1. VK
     try:
         vk.users.get(user_ids=1)
         lines.append("✅ VK API: подключено")
     except Exception as e:
         lines.append(f"❌ VK API: ошибка ({str(e)[:50]})")
 
-    # 2. SQLite
     try:
         db.cursor.execute("SELECT 1")
         lines.append("✅ SQLite: работает")
     except Exception as e:
         lines.append(f"❌ SQLite: ошибка ({str(e)[:50]})")
 
-    # 3. Google Sheets
     try:
         gs.get_sheet().row_values(1)
         lines.append("✅ Google Sheets: доступно")
     except Exception as e:
         lines.append(f"❌ Google Sheets: ошибка ({str(e)[:50]})")
 
-    # 4. Активный розыгрыш
     raffle = db.get_active_raffle()
     if raffle:
         lines.append(f"🎰 Розыгрыш: активен (приз: {raffle[1]})")
     else:
         lines.append("🎰 Розыгрыш: не активен")
 
-    # 5. Количество гостей
     db.cursor.execute("SELECT COUNT(*) FROM guests")
     count = db.cursor.fetchone()[0]
     lines.append(f"👥 Гостей в базе: {count}")
@@ -66,7 +60,6 @@ def handle_status(vk, user_id, send_func):
     send_func(user_id, "\n".join(lines), keyboard=None)
 
 
-# ===== НОВОЕ: /stat (статистика) =====
 def handle_stat(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
         send_func(user_id, "⛔ Только для администраторов.")
@@ -74,18 +67,15 @@ def handle_stat(vk, user_id, send_func):
 
     lines = ["━━━━━━━━━━━━━━━━━━━━━━━━━━", "📊 СТАТИСТИКА", "━━━━━━━━━━━━━━━━━━━━━━━━━━", ""]
 
-    # Всего гостей
     db.cursor.execute("SELECT COUNT(*) FROM guests")
     total = db.cursor.fetchone()[0]
     lines.append(f"👥 Всего гостей: {total}")
 
-    # Визиты за неделю (updated_at за последние 7 дней)
     week_ago = (datetime.now() - timedelta(days=7)).isoformat()
     db.cursor.execute("SELECT COUNT(*) FROM guests WHERE updated_at > ?", (week_ago,))
     week_visits = db.cursor.fetchone()[0]
     lines.append(f"📅 Визитов за неделю: {week_visits}")
 
-    # Активные гости (last_activity за последние 30 дней)
     month_ago = (datetime.now() - timedelta(days=30)).isoformat()
     db.cursor.execute("SELECT COUNT(*) FROM guests WHERE last_activity > ?", (month_ago,))
     active = db.cursor.fetchone()[0]
@@ -93,11 +83,73 @@ def handle_stat(vk, user_id, send_func):
     lines.append(f"🟢 Активных (30 дней): {active}")
     lines.append(f"🔴 Неактивных: {inactive}")
 
-    # Всего достижений у всех гостей
-    db.cursor.execute("SELECT COUNT(*) FROM user_achievements")
-    ach_total = db.cursor.fetchone()[0]
-    lines.append(f"🏆 Всего выдано достижений: {ach_total}")
+    try:
+        db.cursor.execute("SELECT COUNT(*) FROM user_achievements")
+        ach_total = db.cursor.fetchone()[0]
+        lines.append(f"🏆 Всего выдано достижений: {ach_total}")
+    except:
+        lines.append("🏆 Таблица достижений: не найдена")
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     send_func(user_id, "\n".join(lines), keyboard=None)
+
+
+def handle_delete_guest(vk, user_id, message, send_func):
+    if user_id not in ADMIN_IDS:
+        send_func(user_id, "⛔ Только для администраторов.")
+        return
+
+    parts = message.split()
+    if len(parts) != 2:
+        send_func(
+            user_id,
+            "❌ Используй: /delete_guest [ID_гостя]\n"
+            "Например: /delete_guest 123456789"
+        )
+        return
+
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        send_func(user_id, "❌ ID должен быть числом.")
+        return
+
+    guest = db.get_guest(target_id)
+    if not guest:
+        send_func(user_id, f"❌ Гость с ID {target_id} не найден.")
+        return
+
+    guest_name = guest[1] if guest[1] else "Без имени"
+
+    try:
+        db.cursor.execute("DELETE FROM guests WHERE vk_id=?", (target_id,))
+        db.conn.commit()
+        logger.info(f"✅ Гость {target_id} ({guest_name}) удалён из SQLite")
+    except Exception as e:
+        logger.error(f"Ошибка удаления из SQLite: {e}")
+        send_func(user_id, f"❌ Ошибка при удалении из базы: {e}")
+        return
+
+    try:
+        row_num = gs.find_row_by_vk(target_id)
+        if row_num:
+            gs.sheet.delete_rows(row_num)
+            gs.invalidate_cache(target_id)
+            send_func(user_id, f"✅ Гость {target_id} удалён из Google таблицы.")
+            logger.info(f"✅ Гость {target_id} удалён из Google Sheets (строка {row_num})")
+        else:
+            send_func(user_id, f"⚠️ Гость удалён из базы, но не найден в Google таблице.")
+    except Exception as e:
+        logger.error(f"Ошибка удаления из Google Sheets: {e}")
+        send_func(user_id, f"⚠️ Гость удалён из базы, но ошибка при удалении из Google Sheets: {e}")
+
+    send_func(
+        user_id,
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🗑️ ГОСТЬ УДАЛЁН\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"✅ ID: {target_id}\n"
+        f"👤 Имя: {guest_name}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )

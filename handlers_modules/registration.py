@@ -7,6 +7,26 @@ import google_sheets as gs
 import keyboards as kb
 import utils
 from config import logger
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
+
+# ===== ТЕКСТ СОГЛАСИЯ =====
+AGREEMENT_TEXT = (
+    "🔒 **СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ**\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "🧞 Привет! Чтобы я мог начислять тебе визиты,\n"
+    "дарить скидки и приглашать на розыгрыши,\n"
+    "мне нужно немного магии — твой номер телефона\n"
+    "и дата рождения.\n\n"
+    "📌 Твои данные в надёжных руках (моих!) и нужны только для:\n"
+    "   • учёта визитов и бонусов\n"
+    "   • розыгрышей и акций\n"
+    "   • твоего дня рождения (подарки будут!)\n\n"
+    "🔐 Мы никому не передаём твои данные.\n"
+    "Это наше джиннское обещание!\n\n"
+    "Нажми **«Принимаю»**, чтобы продолжить.\n"
+    "Нажми **«Отказываюсь»**, если передумал.\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+)
 
 WELCOME_MESSAGES = [
     (
@@ -55,10 +75,59 @@ WELCOME_MESSAGES = [
     )
 ]
 
+PHONE_REQUEST_MESSAGES = [
+    (
+        "📱 **А ТЕПЕРЬ – САМОЕ ВАЖНОЕ!**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🧞 Чтобы я мог записывать твои визиты,\n"
+        "дарить бонусы и звать на розыгрыши,\n"
+        "мне нужен твой номер телефона.\n\n"
+        "📌 Не переживай, я не буду звонить в 3 часа ночи\n"
+        "(хотя могу, если ты задолжаешь мне уголь 😈).\n\n"
+        "Напиши свой номер в ответ.\n"
+        "Подойдёт любой формат: 7XXXXXXXXXX, +7XXXXXXXXXX, 8XXXXXXXXXX.\n"
+        "Я сам приведу его к нужному виду.\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ),
+    (
+        "📞 **ОТКРОЙ МНЕ СВОЙ СЕКРЕТ!**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🧞 Чтобы я мог исполнять твои желания,\n"
+        "мне нужно знать твой номер телефона.\n\n"
+        "🔐 Обещаю: никакого спама, только дым и магия!\n"
+        "Твои данные в надёжных руках (ну, лапах).\n\n"
+        "Напиши номер в ответ – и мы начнём!\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    ),
+    (
+        "📲 **ПОСЛЕДНИЙ ШАГ!**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🧞 Я почти готов колдовать для тебя скидки!\n"
+        "Осталось только узнать твой номер телефона.\n\n"
+        "✍️ Напиши его в ответ (можно с +7, можно без).\n"
+        "Я сам приведу его к нужному виду.\n\n"
+        "И не бойся – я джинн, а не коллектор. 😄\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+]
+
+def get_agreement_keyboard():
+    keyboard = VkKeyboard(one_time=True)
+    keyboard.add_button('✅ Принимаю', color=VkKeyboardColor.POSITIVE)
+    keyboard.add_button('❌ Отказываюсь', color=VkKeyboardColor.NEGATIVE)
+    return keyboard
+
 def handle_new_guest(vk, user_id, guest, send_func):
     name = guest[1] if guest[1] else "Гость"
-    welcome_text = random.choice(WELCOME_MESSAGES).format(name=name)
-    send_func(user_id, welcome_text, keyboard=None)
+    if len(guest) > 14 and guest[14] == 1:
+        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
+        send_func(user_id, phone_text, keyboard=None)
+    else:
+        send_func(
+            user_id,
+            AGREEMENT_TEXT,
+            keyboard=get_agreement_keyboard()
+        )
 
 def handle_registration_step(vk, user_id, guest, message, send_func):
     reg_step_raw = guest[9] if len(guest) > 9 else 0
@@ -75,8 +144,8 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         gs.update_guest_sheet(user_id, registration_step=1)
         guest = db.get_guest(user_id)
         name = guest[1] if guest[1] else "Гость"
-        welcome_text = random.choice(WELCOME_MESSAGES).format(name=name)
-        send_func(user_id, welcome_text, keyboard=None)
+        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
+        send_func(user_id, phone_text, keyboard=None)
         return True
 
     if reg_step == 0:
@@ -85,8 +154,8 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         gs.update_guest_sheet(user_id, registration_step=1)
         guest = db.get_guest(user_id)
         name = guest[1] if guest[1] else "Гость"
-        welcome_text = random.choice(WELCOME_MESSAGES).format(name=name)
-        send_func(user_id, welcome_text, keyboard=None)
+        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
+        send_func(user_id, phone_text, keyboard=None)
         return True
 
     if reg_step == 1:
@@ -106,7 +175,7 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                     "✅ НОМЕР СОХРАНЁН\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"Номер: {raw_phone}\n\n"
+                    f"📱 Номер: {raw_phone}\n\n"
                     "Теперь укажи дату рождения\n"
                     "(например, 15.05.1990).\n"
                     "Если не хочешь – напиши 'пропустить'.\n"
@@ -207,3 +276,27 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
         return True
 
     return False
+
+
+def ensure_agreement(vk, user_id, guest, send_func):
+    if not guest:
+        return True
+    agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
+    if agreement_given == 1:
+        return True
+    send_func(
+        user_id,
+        AGREEMENT_TEXT,
+        keyboard=get_agreement_keyboard()
+    )
+    return False
+
+
+__all__ = [
+    'handle_new_guest',
+    'handle_registration_step',
+    'get_agreement_keyboard',
+    'AGREEMENT_TEXT',
+    'PHONE_REQUEST_MESSAGES',
+    'ensure_agreement'
+]
