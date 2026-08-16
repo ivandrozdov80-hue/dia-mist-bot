@@ -52,9 +52,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
 
     logger.info(f"🔍 handle_main_menu: user={user_id}, message='{message}'")
 
-    # ===== ПРОВЕРКА СОГЛАСИЯ =====
+    # ===== ПРОВЕРКА СОГЛАСИЯ НА ПД (ДЛЯ ВСЕХ ГОСТЕЙ) =====
     if not ensure_agreement(vk, user_id, guest, send_func):
-        return True
+        return True  # Показываем согласие, прерываем обработку
 
     # ===== ПРИВЕТСТВИЯ =====
     if handle_greeting(user_id, message, send_func):
@@ -85,33 +85,6 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         )
         return True
 
-    # ===== ОБРАБОТКА СОГЛАСИЯ =====
-    if message == '✅ Принимаю':
-        db.update_guest(user_id, agreement_given=1)
-        gs.update_guest_sheet(user_id, agreement_given=1)
-        from handlers_modules.registration import PHONE_REQUEST_MESSAGES
-        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
-        send_func(user_id, phone_text, keyboard=None)
-        return True
-
-    if message == '❌ Отказываюсь':
-        text = (
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🧞 ОЙ, А Я УЖЕ ХОТЕЛ НАКОЛДОВАТЬ ТЕБЕ ПЛЮШКИ…\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Без твоего согласия я не могу обрабатывать данные,\n"
-            "а значит — не могу начислять тебе визиты,\n"
-            "дарить бонусы и звать на розыгрыши.\n\n"
-            "Это как пытаться заварить чай без чайника — ну никак! 😈\n\n"
-            "Но если хочешь просто задать вопрос администратору\n"
-            "или узнать что‑то о заведении — напиши создателю:\n"
-            "https://vk.com/im?sel=57703251\n\n"
-            "Он не такой волшебный, как я, но отвечает быстрее.\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        )
-        send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
-        return True
-
     # ===== АДМИН-МЕНЮ =====
     if message == '📊 Админ-меню' and user_id in ADMIN_IDS:
         send_func(
@@ -127,7 +100,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         )
         return True
 
-    # ===== КНОПКА "НАЗАД" =====
+    # ===== КНОПКА "НАЗАД" (из админ-меню) =====
     if message == '🔙 Назад' and user_id in ADMIN_IDS:
         send_func(
             user_id,
@@ -136,7 +109,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         )
         return True
 
-    # ===== РАССЫЛКА =====
+    # ===== РАССЫЛКА (кнопка) =====
     if message == '📨 Рассылка' and user_id in ADMIN_IDS:
         send_func(
             user_id,
@@ -147,17 +120,17 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         )
         return True
 
-    # ===== СТАТИСТИКА =====
+    # ===== СТАТИСТИКА (кнопка) =====
     if message == '📊 Статистика' and user_id in ADMIN_IDS:
         handle_stat(vk, user_id, send_func)
         return True
 
-    # ===== СТАТУС =====
+    # ===== СТАТУС (кнопка) =====
     if message == '🔍 Статус' and user_id in ADMIN_IDS:
         handle_status(vk, user_id, send_func)
         return True
 
-    # ===== ВСЕ ГОСТИ =====
+    # ===== ВСЕ ГОСТИ (кнопка) =====
     if message == '👥 Все гости' and user_id in ADMIN_IDS:
         db.cursor.execute("SELECT vk_id, name, phone FROM guests ORDER BY vk_id DESC LIMIT 50")
         rows = db.cursor.fetchall()
@@ -179,7 +152,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
             handle_stat(vk, user_id, send_func)
             return True
 
-    # ===== КОМАНДА /visit =====
+    # ===== КОМАНДА /visit (ручной ввод кода) =====
     if low_msg.startswith('/visit'):
         return handle_visit_manual(vk, user_id, guest, message, send_func)
 
@@ -253,7 +226,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         handle_raffle_info(user_id, guest, send_func)
         return True
 
-    # ===== УРОВНИ =====
+    # ===== УРОВНИ (команда /levelinfo) =====
     if low_msg == '/levelinfo':
         lines = [
             "━━━━━━━━━━━━━━━━━━━━━━━━━━",

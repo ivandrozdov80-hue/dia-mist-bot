@@ -53,8 +53,10 @@ def run_bot():
                         if not message or len(message) > MAX_MESSAGE_LENGTH:
                             continue
 
+                        # ===== ПОЛУЧАЕМ ГОСТЯ =====
                         guest = db.get_guest(user_id)
                         
+                        # ===== НОВЫЙ ГОСТЬ =====
                         if not guest:
                             try:
                                 user_info = vk.users.get(user_ids=user_id)[0]
@@ -70,16 +72,52 @@ def run_bot():
                             handlers.handle_new_guest(vk, user_id, guest, send_func)
                             continue
 
+                        # ===== ОБНОВЛЯЕМ АКТИВНОСТЬ =====
                         db.update_activity(user_id)
                         now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                         gs.update_guest_sheet(user_id, last_activity=now_str)
                         gs.ensure_guest_in_sheet(user_id, guest)
 
+                        # ===== ОБРАБОТКА РЕГИСТРАЦИИ =====
                         if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
+                            # Регистрация обработана, обновляем guest
                             guest = db.get_guest(user_id)
                             continue
 
+                        # ===== ГЛАВНОЕ МЕНЮ =====
+                        # КРИТИЧЕСКИ ВАЖНО: ОБНОВЛЯЕМ guest ПЕРЕД КАЖДЫМ ВХОДОМ В МЕНЮ
                         guest = db.get_guest(user_id)
+                        
+                        # Проверяем, не нажал ли пользователь кнопку согласия
+                        # Если да - обрабатываем и обновляем guest
+                        if message == '✅ Принимаю':
+                            db.update_guest(user_id, agreement_given=1)
+                            gs.update_guest_sheet(user_id, agreement_given=1)
+                            guest = db.get_guest(user_id)  # <-- ОБНОВЛЯЕМ СРАЗУ
+                            from handlers_modules.registration import PHONE_REQUEST_MESSAGES
+                            phone_text = random.choice(PHONE_REQUEST_MESSAGES)
+                            send_func(user_id, phone_text, keyboard=None)
+                            continue  # <-- ВЫХОДИМ, ЧТОБЫ НЕ ИДТИ В handle_main_menu
+
+                        if message == '❌ Отказываюсь':
+                            text = (
+                                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                                "🧞 ОЙ, А Я УЖЕ ХОТЕЛ НАКОЛДОВАТЬ ТЕБЕ ПЛЮШКИ…\n"
+                                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                                "Без твоего согласия я не могу обрабатывать данные,\n"
+                                "а значит — не могу начислять тебе визиты,\n"
+                                "дарить бонусы и звать на розыгрыши.\n\n"
+                                "Это как пытаться заварить чай без чайника — ну никак! 😈\n\n"
+                                "Но если хочешь просто задать вопрос администратору\n"
+                                "или узнать что‑то о заведении — напиши создателю:\n"
+                                "https://vk.com/im?sel=57703251\n\n"
+                                "Он не такой волшебный, как я, но отвечает быстрее.\n"
+                                "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            )
+                            send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
+                            continue  # <-- ВЫХОДИМ
+
+                        # Теперь вызываем главное меню со свежим guest
                         handlers.handle_main_menu(vk, user_id, guest, message, send_func)
 
                     except Exception as e:
