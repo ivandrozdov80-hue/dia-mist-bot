@@ -9,11 +9,31 @@ import utils
 from config import logger
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-# ===== ТЕКСТ СОГЛАСИЯ =====
-AGREEMENT_TEXT = (
+# ===== ТЕКСТ СОГЛАСИЯ ДЛЯ СТАРЫХ ГОСТЕЙ (УЖЕ ЕСТЬ В БАЗЕ) =====
+AGREEMENT_TEXT_OLD = (
     "🔒 **СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ**\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    "🧞 Привет! Чтобы я мог начислять тебе визиты,\n"
+    "🧞 Привет! Мы уже знакомы, но я хочу попросить тебя\n"
+    "официально подтвердить своё согласие на обработку\n"
+    "твоих персональных данных.\n\n"
+    "📌 Это нужно для того, чтобы я мог продолжать:\n"
+    "   • начислять тебе визиты\n"
+    "   • дарить бонусы и скидки\n"
+    "   • приглашать на розыгрыши\n\n"
+    "🔐 Твои данные в надёжных руках!\n"
+    "Мы никому их не передаём.\n\n"
+    "Нажми **«Принимаю»**, чтобы продолжить.\n"
+    "Нажми **«Отказываюсь»**, если передумал.\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+)
+
+# ===== ТЕКСТ СОГЛАСИЯ ДЛЯ НОВЫХ ГОСТЕЙ =====
+AGREEMENT_TEXT_NEW = (
+    "🔒 **СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ**\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "🧞 Привет! Добро пожаловать в Dia Mist!\n"
+    "Я — Джинн, твой проводник в мире дыма и бонусов! 🧞💨\n\n"
+    "Чтобы я мог начислять тебе визиты,\n"
     "дарить скидки и приглашать на розыгрыши,\n"
     "мне нужно немного магии — твой номер телефона\n"
     "и дата рождения.\n\n"
@@ -23,6 +43,11 @@ AGREEMENT_TEXT = (
     "   • твоего дня рождения (подарки будут!)\n\n"
     "🔐 Мы никому не передаём твои данные.\n"
     "Это наше джиннское обещание!\n\n"
+    "🎁 **После принятия согласия ты сможешь:**\n"
+    "   • получать бонусы за визиты\n"
+    "   • участвовать в розыгрышах\n"
+    "   • копить на бесплатный кальян\n"
+    "   • получать скидки и подарки\n\n"
     "Нажми **«Принимаю»**, чтобы продолжить.\n"
     "Нажми **«Отказываюсь»**, если передумал.\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -120,10 +145,10 @@ def get_agreement_keyboard():
 def handle_new_guest(vk, user_id, guest, send_func):
     """Приветствие нового гостя и запрос согласия на ПД"""
     name = guest[1] if guest[1] else "Гость"
-    # Для новых гостей всегда показываем согласие
+    # Для новых гостей всегда показываем согласие с регистрацией
     send_func(
         user_id,
-        AGREEMENT_TEXT,
+        AGREEMENT_TEXT_NEW,
         keyboard=get_agreement_keyboard()
     )
 
@@ -296,20 +321,21 @@ def ensure_agreement(vk, user_id, guest, send_func):
     if agreement_given == 1:
         return True  # Согласие уже есть
     
-    # Согласия нет – показываем
-    send_func(
-        user_id,
-        AGREEMENT_TEXT,
-        keyboard=get_agreement_keyboard()
-    )
-    return False  # Гость ещё не дал согласие
+    # Согласия нет – показываем (определяем какой текст)
+    has_phone = guest[2] is not None and guest[2] != ''
+    if has_phone:
+        send_func(user_id, AGREEMENT_TEXT_OLD, keyboard=get_agreement_keyboard())
+    else:
+        send_func(user_id, AGREEMENT_TEXT_NEW, keyboard=get_agreement_keyboard())
+    return False
 
 
 __all__ = [
     'handle_new_guest',
     'handle_registration_step',
     'get_agreement_keyboard',
-    'AGREEMENT_TEXT',
+    'AGREEMENT_TEXT_OLD',
+    'AGREEMENT_TEXT_NEW',
     'PHONE_REQUEST_MESSAGES',
     'ensure_agreement'
 ]

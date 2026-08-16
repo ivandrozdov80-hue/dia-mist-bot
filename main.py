@@ -54,7 +54,7 @@ def run_bot():
                         if not message or len(message) > MAX_MESSAGE_LENGTH:
                             continue
 
-                        # ===== ПОЛУЧАЕМ ГОСТЯ =====
+                        # ===== ПОЛУЧАЕМ ГОСТЯ ИЗ БАЗЫ =====
                         guest = db.get_guest(user_id)
                         
                         # ===== НОВЫЙ ГОСТЬ =====
@@ -70,8 +70,14 @@ def run_bot():
                             db.update_activity(user_id)
                             now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                             gs.update_guest_sheet(user_id, last_activity=now_str)
-                            # Для новых гостей показываем согласие
-                            handlers.handle_new_guest(vk, user_id, guest, send_func)
+                            
+                            # ===== НОВЫЙ ГОСТЬ: показываем согласие С РЕГИСТРАЦИЕЙ =====
+                            from handlers_modules.registration import AGREEMENT_TEXT_NEW, get_agreement_keyboard
+                            send_func(
+                                user_id,
+                                AGREEMENT_TEXT_NEW,
+                                keyboard=get_agreement_keyboard()
+                            )
                             continue
 
                         # ===== ОБНОВЛЯЕМ АКТИВНОСТЬ =====
@@ -80,37 +86,23 @@ def run_bot():
                         gs.update_guest_sheet(user_id, last_activity=now_str)
                         gs.ensure_guest_in_sheet(user_id, guest)
 
-                        # ===== ОБРАБОТКА РЕГИСТРАЦИИ (только для новых гостей) =====
-                        # Проверяем, есть ли у гостя телефон и согласие
+                        # ===== ПРОВЕРЯЕМ СОГЛАСИЕ =====
+                        agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
                         has_phone = guest[2] is not None and guest[2] != ''
-                        has_agreement = len(guest) > 14 and guest[14] == 1
-                        
-                        # Если это НОВЫЙ гость (нет телефона) - показываем регистрацию
-                        if not has_phone and not has_agreement:
-                            if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
-                                guest = db.get_guest(user_id)
-                                continue
-                        elif not has_agreement and has_phone:
-                            # Уже зарегистрированный гость без согласия - показываем только согласие
-                            # Не обрабатываем registration_step, идем в главное меню
-                            pass
 
-                        # ===== ОБНОВЛЯЕМ guest ПЕРЕД МЕНЮ =====
-                        guest = db.get_guest(user_id)
-                        
-                        # ===== ОБРАБОТКА СОГЛАСИЯ =====
+                        # ===== ОБРАБОТКА КНОПОК СОГЛАСИЯ =====
                         if message == '✅ Принимаю':
                             db.update_guest(user_id, agreement_given=1)
                             gs.update_guest_sheet(user_id, agreement_given=1)
-                            guest = db.get_guest(user_id)
+                            guest = db.get_guest(user_id)  # <-- ОБНОВЛЯЕМ!
                             
-                            # Если у гостя нет телефона - просим его
-                            if not guest[2]:
+                            # Если у гостя нет телефона - начинаем регистрацию
+                            if not has_phone:
                                 from handlers_modules.registration import PHONE_REQUEST_MESSAGES
                                 phone_text = random.choice(PHONE_REQUEST_MESSAGES)
                                 send_func(user_id, phone_text, keyboard=None)
                             else:
-                                # Если телефон уже есть - просто показываем меню
+                                # Телефон есть - просто показываем меню
                                 send_func(
                                     user_id,
                                     "✅ Согласие принято! Теперь ты можешь пользоваться всеми функциями бота.",
@@ -135,6 +127,32 @@ def run_bot():
                             )
                             send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
                             continue
+
+                        # ===== ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ =====
+                        if agreement_given != 1:
+                            # Для старых гостей (с телефоном) - простое согласие
+                            if has_phone:
+                                from handlers_modules.registration import AGREEMENT_TEXT_OLD
+                                send_func(
+                                    user_id,
+                                    AGREEMENT_TEXT_OLD,
+                                    keyboard=kb.get_agreement_keyboard()
+                                )
+                            else:
+                                # Для новых (без телефона) - согласие с регистрацией
+                                from handlers_modules.registration import AGREEMENT_TEXT_NEW
+                                send_func(
+                                    user_id,
+                                    AGREEMENT_TEXT_NEW,
+                                    keyboard=kb.get_agreement_keyboard()
+                                )
+                            continue
+
+                        # ===== ОБРАБОТКА РЕГИСТРАЦИИ (ТОЛЬКО ДЛЯ НОВЫХ) =====
+                        if not has_phone:
+                            if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
+                                guest = db.get_guest(user_id)
+                                continue
 
                         # ===== ГЛАВНОЕ МЕНЮ =====
                         guest = db.get_guest(user_id)
