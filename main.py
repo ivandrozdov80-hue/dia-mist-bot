@@ -96,7 +96,8 @@ def run_bot():
                         # 4. ПОЛУЧАЕМ СВЕЖИЕ ДАННЫЕ ГОСТЯ
                         # ============================================================
                         guest = db.get_guest(user_id)
-                        agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
+                        # ИНДЕКС 25 - agreement_given (правильный порядок колонок в БД)
+                        agreement_given = guest[25] if len(guest) > 25 and guest[25] is not None else 0
                         has_phone = guest[2] is not None and guest[2] != ''
 
                         logger.info(f"📊 Статус: user={user_id}, agreement={agreement_given}, phone={has_phone}")
@@ -107,13 +108,12 @@ def run_bot():
                         if message == '✅ Принимаю':
                             logger.info(f"✅ Гость {user_id} принял согласие")
                             
-                            # ПРЯМОЙ SQL ВМЕСТО db.update_guest
+                            # ПРЯМОЙ SQL
                             db.cursor.execute("UPDATE guests SET agreement_given = 1 WHERE vk_id = ?", (user_id,))
                             db.conn.commit()
                             
-                            # Проверяем, что сохранилось
                             guest = db.get_guest(user_id)
-                            logger.info(f"📊 После обновления: agreement={guest[14] if len(guest) > 14 else 'None'}")
+                            logger.info(f"📊 После обновления: agreement={guest[25] if len(guest) > 25 else 'None'}")
                             
                             gs.update_guest_sheet(user_id, agreement_given=1)
                             
@@ -148,7 +148,7 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 6. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ (ТОЛЬКО ПОСЛЕ ОБРАБОТКИ КНОПОК!)
+                        # 6. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ
                         # ============================================================
                         if agreement_given != 1:
                             logger.info(f"⚠️ Гость {user_id} не дал согласие, показываем")
