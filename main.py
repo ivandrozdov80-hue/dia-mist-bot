@@ -11,6 +11,9 @@ import handlers
 import scheduler
 import keyboards as kb
 
+# Импортируем функцию из registration
+from handlers_modules.registration import get_agreement_keyboard, AGREEMENT_TEXT_OLD, AGREEMENT_TEXT_NEW, PHONE_REQUEST_MESSAGES
+
 scheduler_started = False
 _last_msg_time = {}
 
@@ -72,7 +75,6 @@ def run_bot():
                             gs.update_guest_sheet(user_id, last_activity=now_str)
                             
                             # ===== НОВЫЙ ГОСТЬ: показываем согласие С РЕГИСТРАЦИЕЙ =====
-                            from handlers_modules.registration import AGREEMENT_TEXT_NEW, get_agreement_keyboard
                             send_func(
                                 user_id,
                                 AGREEMENT_TEXT_NEW,
@@ -94,11 +96,10 @@ def run_bot():
                         if message == '✅ Принимаю':
                             db.update_guest(user_id, agreement_given=1)
                             gs.update_guest_sheet(user_id, agreement_given=1)
-                            guest = db.get_guest(user_id)  # <-- ОБНОВЛЯЕМ!
+                            guest = db.get_guest(user_id)
                             
                             # Если у гостя нет телефона - начинаем регистрацию
                             if not has_phone:
-                                from handlers_modules.registration import PHONE_REQUEST_MESSAGES
                                 phone_text = random.choice(PHONE_REQUEST_MESSAGES)
                                 send_func(user_id, phone_text, keyboard=None)
                             else:
@@ -132,19 +133,17 @@ def run_bot():
                         if agreement_given != 1:
                             # Для старых гостей (с телефоном) - простое согласие
                             if has_phone:
-                                from handlers_modules.registration import AGREEMENT_TEXT_OLD
                                 send_func(
                                     user_id,
                                     AGREEMENT_TEXT_OLD,
-                                    keyboard=kb.get_agreement_keyboard()
+                                    keyboard=get_agreement_keyboard()
                                 )
                             else:
                                 # Для новых (без телефона) - согласие с регистрацией
-                                from handlers_modules.registration import AGREEMENT_TEXT_NEW
                                 send_func(
                                     user_id,
                                     AGREEMENT_TEXT_NEW,
-                                    keyboard=kb.get_agreement_keyboard()
+                                    keyboard=get_agreement_keyboard()
                                 )
                             continue
 
