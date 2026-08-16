@@ -106,9 +106,16 @@ def run_bot():
                         # ============================================================
                         if message == '✅ Принимаю':
                             logger.info(f"✅ Гость {user_id} принял согласие")
-                            db.update_guest(user_id, agreement_given=1)
-                            gs.update_guest_sheet(user_id, agreement_given=1)
+                            
+                            # ПРЯМОЙ SQL ВМЕСТО db.update_guest
+                            db.cursor.execute("UPDATE guests SET agreement_given = 1 WHERE vk_id = ?", (user_id,))
+                            db.conn.commit()
+                            
+                            # Проверяем, что сохранилось
                             guest = db.get_guest(user_id)
+                            logger.info(f"📊 После обновления: agreement={guest[14] if len(guest) > 14 else 'None'}")
+                            
+                            gs.update_guest_sheet(user_id, agreement_given=1)
                             
                             if not guest[2]:
                                 phone_text = random.choice(PHONE_REQUEST_MESSAGES)
