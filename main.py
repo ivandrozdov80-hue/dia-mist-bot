@@ -93,22 +93,39 @@ def run_bot():
                         gs.ensure_guest_in_sheet(user_id, guest)
 
                         # ============================================================
-                        # 4. ПРОВЕРЯЕМ ДАННЫЕ ГОСТЯ
+                        # 4. ПРОВЕРЯЕМ ДАННЫЕ ГОСТЯ (СВЕЖИЕ!)
                         # ============================================================
+                        guest = db.get_guest(user_id)  # <-- ОБЯЗАТЕЛЬНО СВЕЖИЙ!
                         agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
                         has_phone = guest[2] is not None and guest[2] != ''
 
-                        logger.info(f"📊 Статус гостя {user_id}: agreement={agreement_given}, phone={has_phone}")
+                        # ============================================================
+                        # 5. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ И ВЫХОДИМ
+                        # ============================================================
+                        if agreement_given != 1:
+                            logger.info(f"⚠️ Гость {user_id} не дал согласие, показываем")
+                            if has_phone:
+                                send_func(
+                                    user_id,
+                                    AGREEMENT_TEXT_OLD,
+                                    keyboard=get_agreement_keyboard()
+                                )
+                            else:
+                                send_func(
+                                    user_id,
+                                    AGREEMENT_TEXT_NEW,
+                                    keyboard=get_agreement_keyboard()
+                                )
+                            continue  # <-- ВАЖНО: ВЫХОДИМ, НЕ ИДЁМ ДАЛЬШЕ
 
                         # ============================================================
-                        # 5. ОБРАБОТКА КНОПОК СОГЛАСИЯ
+                        # 6. ОБРАБОТКА КНОПОК СОГЛАСИЯ
                         # ============================================================
                         if message == '✅ Принимаю':
                             logger.info(f"✅ Гость {user_id} принял согласие")
                             db.update_guest(user_id, agreement_given=1)
                             gs.update_guest_sheet(user_id, agreement_given=1)
-                            guest = db.get_guest(user_id)  # <-- ОБНОВЛЯЕМ!
-                            agreement_given = 1  # <-- ОБНОВЛЯЕМ ПЕРЕМЕННУЮ!
+                            guest = db.get_guest(user_id)
                             
                             if not guest[2]:
                                 phone_text = random.choice(PHONE_REQUEST_MESSAGES)
@@ -141,25 +158,6 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 6. ЕСЛИ СОГЛАСИЯ НЕТ - ПОКАЗЫВАЕМ
-                        # ============================================================
-                        if agreement_given != 1:
-                            logger.info(f"⚠️ Гость {user_id} не дал согласие, показываем")
-                            if has_phone:
-                                send_func(
-                                    user_id,
-                                    AGREEMENT_TEXT_OLD,
-                                    keyboard=get_agreement_keyboard()
-                                )
-                            else:
-                                send_func(
-                                    user_id,
-                                    AGREEMENT_TEXT_NEW,
-                                    keyboard=get_agreement_keyboard()
-                                )
-                            continue
-
-                        # ============================================================
                         # 7. ОБРАБОТКА РЕГИСТРАЦИИ (ТОЛЬКО ДЛЯ НОВЫХ)
                         # ============================================================
                         if not has_phone:
@@ -168,9 +166,9 @@ def run_bot():
                                 continue
 
                         # ============================================================
-                        # 8. ГЛАВНОЕ МЕНЮ - ОБЯЗАТЕЛЬНО ОБНОВЛЯЕМ guest!
+                        # 8. ГЛАВНОЕ МЕНЮ
                         # ============================================================
-                        guest = db.get_guest(user_id)  # <-- КРИТИЧЕСКИ ВАЖНО!
+                        guest = db.get_guest(user_id)
                         handlers.handle_main_menu(vk, user_id, guest, message, send_func)
 
                     except Exception as e:

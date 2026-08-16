@@ -9,7 +9,7 @@ import keyboards as kb
 import utils
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-from handlers_modules.registration import handle_new_guest, handle_registration_step, ensure_agreement
+from handlers_modules.registration import handle_new_guest, handle_registration_step
 from handlers_modules.profile import handle_profile
 from handlers_modules.visits import (
     handle_visit_button,
@@ -51,10 +51,6 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     low_msg = message.lower()
 
     logger.info(f"🔍 handle_main_menu: user={user_id}, message='{message}'")
-
-    # ===== ПРОВЕРКА СОГЛАСИЯ НА ПД (ДЛЯ ВСЕХ ГОСТЕЙ) =====
-    if not ensure_agreement(vk, user_id, guest, send_func):
-        return True  # Показываем согласие, прерываем обработку
 
     # ===== ПРИВЕТСТВИЯ =====
     if handle_greeting(user_id, message, send_func):
