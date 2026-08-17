@@ -167,9 +167,13 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 7. ОБРАБОТКА РЕГИСТРАЦИИ (ТОЛЬКО ДЛЯ НОВЫХ)
+                        # 7. ОБРАБОТКА РЕГИСТРАЦИИ (ПРОВЕРЯЕМ reg_step, А НЕ has_phone!)
                         # ============================================================
-                        if not has_phone:
+                        reg_step = guest[9] if len(guest) > 9 and guest[9] is not None else 0
+                        
+                        # Если reg_step < 3 — гость ещё не зарегистрирован полностью
+                        if reg_step < 3:
+                            logger.info(f"📝 Вызов handle_registration_step: user={user_id}, reg_step={reg_step}")
                             if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
                                 guest = db.get_guest(user_id)
                                 continue
