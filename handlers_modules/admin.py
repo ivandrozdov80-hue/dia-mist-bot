@@ -1,15 +1,77 @@
-# admin_commands.py
+# handlers_modules/admin.py
 import logging
 import database as db
 import google_sheets as gs
 from config import ADMIN_IDS
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# ===== УДАЛЕНИЕ ГОСТЯ =====
+# ============================================================
+# ОБЩАЯ ПРОВЕРКА ПРАВ
+# ============================================================
+def is_admin(user_id):
+    return user_id in ADMIN_IDS
+
+# ============================================================
+# РЕАГИРОВАНИЕ НА НОВЫЙ ВИЗИТ (вызывается из main.py)
+# ============================================================
+def handle_admin_newvisit(vk, user_id, guest, send_func):
+    """
+    Функция, которая ожидается в __init__.py.
+    Вызывается при новом визите гостя (админ-уведомление).
+    """
+    if not is_admin(user_id):
+        return
+    
+    guest_name = guest[1] if guest else "Неизвестный"
+    guest_phone = guest[2] if guest and len(guest) > 2 else "Не указан"
+    visits = guest[5] if guest and len(guest) > 5 else 0
+    
+    admin_text = (
+        f"🔔 НОВЫЙ ВИЗИТ!\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 Гость: {guest_name}\n"
+        f"🆔 ID: {user_id}\n"
+        f"📞 Телефон: {guest_phone}\n"
+        f"📊 Визитов: {visits}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    
+    for admin_id in ADMIN_IDS:
+        try:
+            vk.messages.send(
+                user_id=admin_id,
+                message=admin_text,
+                random_id=0
+            )
+        except:
+            pass
+
+# ============================================================
+# ОБРАБОТКА КОМАНДЫ /admin
+# ============================================================
+def handle_admin_command(vk, user_id, send_func):
+    if not is_admin(user_id):
+        send_func(user_id, "⛔ Только для администратора!")
+        return
+    
+    text = (
+        "🛠️ АДМИН-КОМАНДЫ:\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "/delete_guest <ID> — удалить гостя\n"
+        "/list_guests — список гостей\n"
+        "/clear_cache — очистить кэш Google Sheets\n"
+        "/restore_guests — восстановить гостей из БД\n"
+        "/admin — эта справка"
+    )
+    send_func(user_id, text)
+
+# ============================================================
+# УДАЛЕНИЕ ГОСТЯ
+# ============================================================
 def delete_guest(vk, user_id, guest_id, send_func):
-    """Вызывается из main.py при команде /delete_guest <ID>"""
-    if user_id not in ADMIN_IDS:
+    if not is_admin(user_id):
         send_func(user_id, "⛔ Только для администратора!")
         return
     
@@ -36,9 +98,11 @@ def delete_guest(vk, user_id, guest_id, send_func):
     
     send_func(user_id, result_text)
 
-# ===== СПИСОК ГОСТЕЙ =====
+# ============================================================
+# СПИСОК ГОСТЕЙ
+# ============================================================
 def list_guests(vk, user_id, send_func):
-    if user_id not in ADMIN_IDS:
+    if not is_admin(user_id):
         send_func(user_id, "⛔ Только для администратора!")
         return
     
@@ -53,9 +117,11 @@ def list_guests(vk, user_id, send_func):
     
     send_func(user_id, text[:4000])
 
-# ===== ОЧИСТКА КЭША =====
+# ============================================================
+# ОЧИСТКА КЭША
+# ============================================================
 def clear_cache(vk, user_id, send_func):
-    if user_id not in ADMIN_IDS:
+    if not is_admin(user_id):
         send_func(user_id, "⛔ Только для администратора!")
         return
     
@@ -66,9 +132,11 @@ def clear_cache(vk, user_id, send_func):
     else:
         send_func(user_id, "❌ Ошибка очистки кэша")
 
-# ===== ВОССТАНОВЛЕНИЕ ГОСТЕЙ =====
+# ============================================================
+# ВОССТАНОВЛЕНИЕ ГОСТЕЙ
+# ============================================================
 def restore_guests(vk, user_id, send_func):
-    if user_id not in ADMIN_IDS:
+    if not is_admin(user_id):
         send_func(user_id, "⛔ Только для администратора!")
         return
     

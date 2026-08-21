@@ -11,9 +11,22 @@ import google_sheets as gs
 import handlers
 import scheduler
 import keyboards as kb
-import admin_commands
 
-from handlers_modules.registration import get_agreement_keyboard, AGREEMENT_TEXT_OLD, AGREEMENT_TEXT_NEW, PHONE_REQUEST_MESSAGES, handle_registration_step
+from handlers_modules import (
+    handle_admin_newvisit,
+    handle_admin_command,
+    delete_guest,
+    list_guests,
+    clear_cache,
+    restore_guests
+)
+from handlers_modules.registration import (
+    get_agreement_keyboard,
+    AGREEMENT_TEXT_OLD,
+    AGREEMENT_TEXT_NEW,
+    PHONE_REQUEST_MESSAGES,
+    handle_registration_step
+)
 
 scheduler_started = False
 _last_msg_time = {}
@@ -56,6 +69,33 @@ def run_bot():
                             continue
 
                         if not message or len(message) > MAX_MESSAGE_LENGTH:
+                            continue
+
+                        # ============================================================
+                        # АДМИН-КОМАНДЫ
+                        # ============================================================
+                        if message.lower().startswith('/admin'):
+                            handle_admin_command(vk, user_id, send_func)
+                            continue
+
+                        if message.lower().startswith('/delete_guest '):
+                            try:
+                                target_id = int(message.split()[1])
+                                delete_guest(vk, user_id, target_id, send_func)
+                            except:
+                                send_func(user_id, "❌ Неверный ID. Пример: /delete_guest 123456789")
+                            continue
+
+                        if message.lower().startswith('/list_guests'):
+                            list_guests(vk, user_id, send_func)
+                            continue
+
+                        if message.lower().startswith('/clear_cache'):
+                            clear_cache(vk, user_id, send_func)
+                            continue
+
+                        if message.lower().startswith('/restore_guests'):
+                            restore_guests(vk, user_id, send_func)
                             continue
 
                         # ============================================================
@@ -145,29 +185,6 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 5.1 ОБРАБОТКА АДМИН-КОМАНД
-                        # ============================================================
-                        if message.lower().startswith('/delete_guest '):
-                            try:
-                                target_id = int(message.split()[1])
-                                admin_commands.delete_guest(vk, user_id, target_id, send_func)
-                            except:
-                                send_func(user_id, "❌ Неверный ID. Пример: /delete_guest 123456789")
-                            continue
-
-                        if message.lower().startswith('/list_guests'):
-                            admin_commands.list_guests(vk, user_id, send_func)
-                            continue
-
-                        if message.lower().startswith('/clear_cache'):
-                            admin_commands.clear_cache(vk, user_id, send_func)
-                            continue
-
-                        if message.lower().startswith('/restore_guests'):
-                            admin_commands.restore_guests(vk, user_id, send_func)
-                            continue
-
-                        # ============================================================
                         # 6. ОБРАБОТКА КНОПОК СОГЛАСИЯ
                         # ============================================================
                         if message == '✅ Принимаю':
@@ -226,7 +243,6 @@ def run_bot():
                             if handle_registration_step(vk, user_id, guest, message, send_func):
                                 guest = db.get_guest(user_id)
                                 continue
-                            # Если не обработано — ждём ввод
                             continue
 
                         # ============================================================
@@ -248,7 +264,7 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 10. ОБРАБОТКА ВВОДА ДАТЫ РОЖДЕНИЯ (когда гость отвечает)
+                        # 10. ОБРАБОТКА ВВОДА ДАТЫ РОЖДЕНИЯ
                         # ============================================================
                         if has_phone and not has_birth:
                             if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', message):
@@ -297,7 +313,7 @@ def run_bot():
                                 continue
 
                         # ============================================================
-                        # 11. ОБРАБОТКА РЕГИСТРАЦИИ (если reg_step < 3)
+                        # 11. ОБРАБОТКА РЕГИСТРАЦИИ
                         # ============================================================
                         if reg_step < 3:
                             if handle_registration_step(vk, user_id, guest, message, send_func):
