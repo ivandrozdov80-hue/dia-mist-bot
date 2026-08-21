@@ -1,9 +1,21 @@
 # handlers_modules/help.py
+"""
+Модуль для отображения справки по командам бота.
+"""
 import keyboards as kb
 from .utils import update_command_count
 
+
 def handle_help(user_id, send_func):
+    """
+    Показывает список доступных команд и их описание.
+    
+    Args:
+        user_id (int): ID пользователя
+        send_func (callable): Функция отправки сообщения
+    """
     update_command_count(user_id, 'help')
+    
     text = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🧞 ДЖИНН ПОМОЩНИК\n"
@@ -22,10 +34,12 @@ def handle_help(user_id, send_func):
         "   /promo – акции\n"
         "   /birth ДД.ММ.ГГГГ – указать дату рождения\n\n"
         "👑 Администратору:\n"
-        "   /newvisit [id], /create_raffle, /draw\n\n"
+        "   /newvisit [id], /create_raffle, /draw\n"
+        "   /status, /stat, /notify, /delete_guest [id]\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Теперь ты знаешь всё! Жми на кнопки\n"
         "и наслаждайся! 🧞💨\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
+    
     send_func(user_id, text, keyboard=kb.get_main_keyboard())

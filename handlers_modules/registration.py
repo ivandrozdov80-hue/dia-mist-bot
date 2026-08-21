@@ -53,6 +53,17 @@ AGREEMENT_TEXT_NEW = (
     "━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
 
+# ===== БОНУСНЫЕ СООБЩЕНИЯ =====
+BONUS_MESSAGES = [
+    "🎉 Ты просто огонь! Я, Джинн Dia Mist, дарю тебе +1 визит за то, что ты решил стать частью нашей дымной семьи! Осталось всего 5 визитов до бесплатного кальяна – ты справишься! 💨",
+    "🔥 О, я чувствую твою энергетику! Ты точно наш человек. Держи +1 визит в подарок – это чтоб ты сразу понял: у нас тут весело! Осталось 5 шагов до халявного дыма! 🧞",
+    "🧞 А ты смелый! За это я начисляю тебе +1 визит – магия начинает работать! Теперь осталось 5 визитов, и твой бесплатный кальян будет ждать тебя! Не подведи! 😎",
+    "👋 Привет, новобранец! Ты сделал первый шаг. Я, Джинн, даю тебе +1 визит просто за то, что ты появился! Запомни: осталось 5 визитов – и ты в игре! 🎁",
+    "🍃 Ветер перемен? Или просто ты? В любом случае – ты с нами! Получай +1 визит в подарок – это мой тебе знак внимания. Осталось 5 визитов до бесплатного кальяна! Не профукай! 😈",
+    "💨 Ты только что вошёл – а уже на шаг ближе к бесплатному кальяну! Джинн дарит тебе +1 визит! Осталось 5 – и твой дым будет за наш счёт! 🔥",
+    "🎁 Сюрприз! Ты зарегистрировался, и я, Джинн, решил отметить это +1 визитом в подарок! Осталось всего 5 визитов до твоего первого бесплатного кальяна! Удачи! 🍀"
+]
+
 WELCOME_MESSAGES = [
     (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -136,13 +147,58 @@ PHONE_REQUEST_MESSAGES = [
     )
 ]
 
+SKIP_MESSAGES = [
+    "🎂 Эх, а как же подарок на день рождения? Ну ладно, тайну возраста оставим при тебе 😏",
+    "🧞 Я бы приготовил тебе сюрприз на день рождения... но кто я такой, чтобы лезть в чужие секреты?",
+    "🎁 Отказываешься от даты рождения? Смело. Но потом не говори, что Джинн оставил тебя без подарка 😈",
+    "🤔 Хитро-хитро... возраст скрыт, паспорт не показан. Ладно, принимается!",
+    "🎂 Хорошо, не скажешь дату — не скажешь. Но если вдруг захочешь подарок, я буду ждать 👀",
+    "🧞 Некоторые скрывают возраст, некоторые скрывают вкусы кальяна. Я уже ничему не удивляюсь.",
+    "🎁 Ну вот, подарок на день рождения снова остался без хозяина..."
+]
+
 def get_agreement_keyboard():
     keyboard = VkKeyboard(one_time=True)
     keyboard.add_button('✅ Принимаю', color=VkKeyboardColor.POSITIVE)
     keyboard.add_button('❌ Отказываюсь', color=VkKeyboardColor.NEGATIVE)
     return keyboard
 
+
+def _complete_registration(user_id, send_func):
+    """
+    Внутренняя функция для завершения регистрации:
+    начисляет бонусы и показывает меню.
+    """
+    guest = db.get_guest(user_id)
+    current_visits = int(guest[5]) if guest[5] is not None else 0
+    
+    if current_visits == 0:
+        new_visits = 1
+        new_visits_in_cycle = 1
+        new_level = utils.get_level_by_visits(new_visits)
+        db.cursor.execute(
+            "UPDATE guests SET visits=?, visits_in_cycle=?, level=?, updated_at=? WHERE vk_id=?",
+            (new_visits, new_visits_in_cycle, new_level, datetime.now().isoformat(), user_id)
+        )
+        db.conn.commit()
+        gs.update_guest_sheet(user_id, visits=new_visits, visits_in_cycle=new_visits_in_cycle, level=new_level)
+        send_func(user_id, random.choice(BONUS_MESSAGES), keyboard=kb.get_main_keyboard())
+    else:
+        send_func(
+            user_id,
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎉 РЕГИСТРАЦИЯ ЗАВЕРШЕНА!\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Теперь ты полноправный гость.\n"
+            "Вот главное меню:\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            keyboard=kb.get_main_keyboard()
+        )
+    return True
+
+
 def handle_new_guest(vk, user_id, guest, send_func):
+    """Обработка нового гостя — показываем согласие."""
     name = guest[1] if guest[1] else "Гость"
     send_func(
         user_id,
@@ -150,7 +206,13 @@ def handle_new_guest(vk, user_id, guest, send_func):
         keyboard=get_agreement_keyboard()
     )
 
+
 def handle_registration_step(vk, user_id, guest, message, send_func):
+    """
+    Обработка шагов регистрации:
+    - reg_step == 0 или 1: запрос телефона
+    - reg_step == 2: запрос даты рождения
+    """
     reg_step_raw = guest[9] if len(guest) > 9 else 0
     try:
         reg_step = int(reg_step_raw) if reg_step_raw is not None else 0
@@ -159,33 +221,24 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
 
     phone = guest[2] if len(guest) > 2 else ''
     
-    # Логируем для отладки
     logger.info(f"📝 handle_registration_step: user={user_id}, reg_step={reg_step}, phone={phone}, message={message}")
     
-    # Если у гостя уже есть телефон - он зарегистрирован, выходим
+    # Если уже есть телефон — регистрация пройдена (только для новых гостей)
     if phone:
         logger.info(f"📝 У гостя {user_id} уже есть телефон, пропускаем регистрацию")
         return False
 
-    if reg_step >= 3 and not phone:
-        db.cursor.execute("UPDATE guests SET registration_step=1 WHERE vk_id=?", (user_id,))
-        db.conn.commit()
-        gs.update_guest_sheet(user_id, registration_step=1)
-        guest = db.get_guest(user_id)
-        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
-        send_func(user_id, phone_text, keyboard=None)
-        return True
-
-    if reg_step == 0:
-        db.cursor.execute("UPDATE guests SET registration_step=1 WHERE vk_id=?", (user_id,))
-        db.conn.commit()
-        gs.update_guest_sheet(user_id, registration_step=1)
-        guest = db.get_guest(user_id)
-        phone_text = random.choice(PHONE_REQUEST_MESSAGES)
-        send_func(user_id, phone_text, keyboard=None)
-        return True
-
-    if reg_step == 1:
+    # ============================================================
+    # ШАГ 0 или 1: запрос телефона
+    # ============================================================
+    if reg_step == 0 or reg_step == 1:
+        # Если reg_step == 0 — переводим на шаг 1
+        if reg_step == 0:
+            db.cursor.execute("UPDATE guests SET registration_step=1 WHERE vk_id=?", (user_id,))
+            db.conn.commit()
+            gs.update_guest_sheet(user_id, registration_step=1)
+        
+        # Обработка ввода телефона
         raw_phone = re.sub(r'[^0-9]', '', message)
         if len(raw_phone) >= 10 and raw_phone[0] in ('7', '8'):
             if raw_phone[0] == '8':
@@ -217,26 +270,20 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
             send_func(user_id, "❌ Номер должен начинаться с 7 или 8 и содержать не менее 10 цифр. Попробуй ещё раз.")
             return True
 
+    # ============================================================
+    # ШАГ 2: запрос даты рождения
+    # ============================================================
     if reg_step == 2:
         logger.info(f"🔍 Обработка даты рождения для {user_id}: {message}")
         
+        # Пропуск даты
         if message.lower() in ('пропустить', 'skip', 'нет'):
             birth = None
-            skip_messages = [
-                "🎂 Эх, а как же подарок на день рождения? Ну ладно, тайну возраста оставим при тебе 😏",
-                "🧞 Я бы приготовил тебе сюрприз на день рождения... но кто я такой, чтобы лезть в чужие секреты?",
-                "🎁 Отказываешься от даты рождения? Смело. Но потом не говори, что Джинн оставил тебя без подарка 😈",
-                "🤔 Хитро-хитро... возраст скрыт, паспорт не показан. Ладно, принимается!",
-                "🎂 Хорошо, не скажешь дату — не скажешь. Но если вдруг захочешь подарок, я буду ждать 👀",
-                "🧞 Некоторые скрывают возраст, некоторые скрывают вкусы кальяна. Я уже ничему не удивляюсь.",
-                "🎁 Ну вот, подарок на день рождения снова остался без хозяина..."
-            ]
             send_func(
                 user_id,
-                random.choice(skip_messages) +
+                random.choice(SKIP_MESSAGES) +
                 "\n\n💡 Если передумаешь, напиши:\n/birth 15.05.1999"
             )
-            # Сохраняем пропуск и переходим к шагу 3
             db.cursor.execute(
                 "UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?",
                 (birth, user_id)
@@ -244,112 +291,43 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
             db.conn.commit()
             now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             gs.update_guest_sheet(user_id, birth=birth, registration_step=3, updated_at=now_str)
-            
-            # Завершаем регистрацию
-            guest_after = db.get_guest(user_id)
-            current_visits = int(guest_after[5]) if guest_after[5] is not None else 0
-            if current_visits == 0:
-                new_visits = 1
-                new_visits_in_cycle = 1
-                new_level = utils.get_level_by_visits(new_visits)
-                db.cursor.execute(
-                    "UPDATE guests SET visits=?, visits_in_cycle=?, level=?, updated_at=? WHERE vk_id=?",
-                    (new_visits, new_visits_in_cycle, new_level, datetime.now().isoformat(), user_id)
-                )
-                db.conn.commit()
-                gs.update_guest_sheet(user_id, visits=new_visits, visits_in_cycle=new_visits_in_cycle, level=new_level)
-                bonus_messages = [
-                    "🎉 Ты просто огонь! Я, Джинн Dia Mist, дарю тебе +1 визит за то, что ты решил стать частью нашей дымной семьи! Осталось всего 5 визитов до бесплатного кальяна – ты справишься! 💨",
-                    "🔥 О, я чувствую твою энергетику! Ты точно наш человек. Держи +1 визит в подарок – это чтоб ты сразу понял: у нас тут весело! Осталось 5 шагов до халявного дыма! 🧞",
-                    "🧞 А ты смелый! За это я начисляю тебе +1 визит – магия начинает работать! Теперь осталось 5 визитов, и твой бесплатный кальян будет ждать тебя! Не подведи! 😎",
-                    "👋 Привет, новобранец! Ты сделал первый шаг. Я, Джинн, даю тебе +1 визит просто за то, что ты появился! Запомни: осталось 5 визитов – и ты в игре! 🎁",
-                    "🍃 Ветер перемен? Или просто ты? В любом случае – ты с нами! Получай +1 визит в подарок – это мой тебе знак внимания. Осталось 5 визитов до бесплатного кальяна! Не профукай! 😈",
-                    "💨 Ты только что вошёл – а уже на шаг ближе к бесплатному кальяну! Джинн дарит тебе +1 визит! Осталось 5 – и твой дым будет за наш счёт! 🔥",
-                    "🎁 Сюрприз! Ты зарегистрировался, и я, Джинн, решил отметить это +1 визитом в подарок! Осталось всего 5 визитов до твоего первого бесплатного кальяна! Удачи! 🍀"
-                ]
-                send_func(user_id, random.choice(bonus_messages), keyboard=kb.get_main_keyboard())
-            else:
-                send_func(
-                    user_id,
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "🎉 РЕГИСТРАЦИЯ ЗАВЕРШЕНА!\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "Теперь ты полноправный гость.\n"
-                    "Вот главное меню:\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                    keyboard=kb.get_main_keyboard()
-                )
-            return True
-            
-        else:
-            if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', message):
-                birth = message
-                logger.info(f"✅ Дата рождения сохранена: {birth}")
-                send_func(
-                    user_id,
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "🎂 ДАТА СОХРАНЕНА!\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"Запомним: {birth}.\n"
-                    "В твой день рождения мы подарим тебе подарок! 🎁\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                )
-            else:
-                send_func(
-                    user_id,
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "❌ НЕВЕРНЫЙ ФОРМАТ\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "Используй формат ДД.ММ.ГГГГ\n"
-                    "(например, 15.05.1990)\n"
-                    "или напиши 'пропустить'.\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                )
-                return True
-
-        db.cursor.execute(
-            "UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?",
-            (birth, user_id)
-        )
-        db.conn.commit()
-        now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        gs.update_guest_sheet(user_id, birth=birth, registration_step=3, updated_at=now_str)
-
-        guest_after = db.get_guest(user_id)
-        current_visits = int(guest_after[5]) if guest_after[5] is not None else 0
-        if current_visits == 0:
-            new_visits = 1
-            new_visits_in_cycle = 1
-            new_level = utils.get_level_by_visits(new_visits)
+            return _complete_registration(user_id, send_func)
+        
+        # Проверка формата даты
+        if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', message):
+            birth = message
+            logger.info(f"✅ Дата рождения сохранена: {birth}")
+            send_func(
+                user_id,
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎂 ДАТА СОХРАНЕНА!\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"Запомним: {birth}.\n"
+                f"В твой день рождения мы подарим тебе подарок! 🎁\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            )
             db.cursor.execute(
-                "UPDATE guests SET visits=?, visits_in_cycle=?, level=?, updated_at=? WHERE vk_id=?",
-                (new_visits, new_visits_in_cycle, new_level, datetime.now().isoformat(), user_id)
+                "UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?",
+                (birth, user_id)
             )
             db.conn.commit()
-            gs.update_guest_sheet(user_id, visits=new_visits, visits_in_cycle=new_visits_in_cycle, level=new_level)
-            bonus_messages = [
-                "🎉 Ты просто огонь! Я, Джинн Dia Mist, дарю тебе +1 визит за то, что ты решил стать частью нашей дымной семьи! Осталось всего 5 визитов до бесплатного кальяна – ты справишься! 💨",
-                "🔥 О, я чувствую твою энергетику! Ты точно наш человек. Держи +1 визит в подарок – это чтоб ты сразу понял: у нас тут весело! Осталось 5 шагов до халявного дыма! 🧞",
-                "🧞 А ты смелый! За это я начисляю тебе +1 визит – магия начинает работать! Теперь осталось 5 визитов, и твой бесплатный кальян будет ждать тебя! Не подведи! 😎",
-                "👋 Привет, новобранец! Ты сделал первый шаг. Я, Джинн, даю тебе +1 визит просто за то, что ты появился! Запомни: осталось 5 визитов – и ты в игре! 🎁",
-                "🍃 Ветер перемен? Или просто ты? В любом случае – ты с нами! Получай +1 визит в подарок – это мой тебе знак внимания. Осталось 5 визитов до бесплатного кальяна! Не профукай! 😈",
-                "💨 Ты только что вошёл – а уже на шаг ближе к бесплатному кальяну! Джинн дарит тебе +1 визит! Осталось 5 – и твой дым будет за наш счёт! 🔥",
-                "🎁 Сюрприз! Ты зарегистрировался, и я, Джинн, решил отметить это +1 визитом в подарок! Осталось всего 5 визитов до твоего первого бесплатного кальяна! Удачи! 🍀"
-            ]
-            send_func(user_id, random.choice(bonus_messages), keyboard=kb.get_main_keyboard())
+            now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+            gs.update_guest_sheet(user_id, birth=birth, registration_step=3, updated_at=now_str)
+            return _complete_registration(user_id, send_func)
         else:
             send_func(
                 user_id,
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🎉 РЕГИСТРАЦИЯ ЗАВЕРШЕНА!\n"
+                "❌ НЕВЕРНЫЙ ФОРМАТ\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "Теперь ты полноправный гость.\n"
-                "Вот главное меню:\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                keyboard=kb.get_main_keyboard()
+                "Используй формат ДД.ММ.ГГГГ\n"
+                "(например, 15.05.1990)\n"
+                "или напиши 'пропустить'.\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━"
             )
-        return True
+            return True
 
+    # Если reg_step >= 3 — регистрация завершена
     return False
 
 
@@ -362,13 +340,11 @@ def ensure_agreement(vk, user_id, guest, send_func):
     if not guest:
         return True
     
-    # Проверяем agreement_given (индекс 25)
     agreement_given = guest[25] if len(guest) > 25 and guest[25] is not None else 0
     
     if agreement_given == 1:
-        return True  # Согласие уже есть
+        return True
     
-    # Согласия нет – показываем
     has_phone = guest[2] is not None and guest[2] != ''
     if has_phone:
         send_func(user_id, AGREEMENT_TEXT_OLD, keyboard=get_agreement_keyboard())

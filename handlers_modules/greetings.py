@@ -1,7 +1,11 @@
 # greetings.py
+"""
+Модуль для обработки приветствий, смайликов, случайных шуток и стикеров.
+"""
 import random
+import re
 import keyboards as kb
-from config import logger
+
 
 GREETING_RESPONSES = {
     'привет': [
@@ -92,7 +96,34 @@ RANDOM_JOKES = [
     "Твоё сообщение – это вызов моему интеллекту. Но я справлюсь: просто скажу – жми на кнопки."
 ]
 
+# Паттерн для поиска эмодзи (собирается один раз)
+EMOJI_PATTERN = re.compile(
+    r'[\U0001F600-\U0001F64F'
+    r'\U0001F300-\U0001F5FF'
+    r'\U0001F680-\U0001F6FF'
+    r'\U0001F700-\U0001F77F'
+    r'\U0001F780-\U0001F7FF'
+    r'\U0001F800-\U0001F8FF'
+    r'\U0001F900-\U0001F9FF'
+    r'\U0001FA00-\U0001FA6F'
+    r'\U0001FA70-\U0001FAFF'
+    r'\u2600-\u26FF'
+    r'\u2700-\u27BF]'
+)
+
+
 def handle_greeting(user_id, message, send_func):
+    """
+    Обрабатывает приветствия и прощальные фразы.
+    
+    Args:
+        user_id (int): ID пользователя
+        message (str): Текст сообщения
+        send_func (callable): Функция отправки сообщения
+        
+    Returns:
+        bool: True если сообщение было обработано, иначе False
+    """
     low_msg = message.lower()
     for keyword, response_key in GREETING_KEYWORDS.items():
         if keyword in low_msg:
@@ -101,11 +132,21 @@ def handle_greeting(user_id, message, send_func):
             return True
     return False
 
+
 def handle_emoji_short(user_id, message, send_func):
+    """
+    Обрабатывает короткие сообщения с эмодзи.
+    
+    Args:
+        user_id (int): ID пользователя
+        message (str): Текст сообщения
+        send_func (callable): Функция отправки сообщения
+        
+    Returns:
+        bool: True если сообщение было обработано, иначе False
+    """
     if len(message) <= 5 and not message.startswith('/') and not message.startswith('?'):
-        import re
-        emoji_pattern = re.compile(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\u2600-\u26FF\u2700-\u27BF]')
-        if emoji_pattern.search(message):
+        if EMOJI_PATTERN.search(message):
             emoji_responses = [
                 "😄 Смайлик – это круто! А я люблю дым и улыбки! Приходи к нам! 🧞",
                 "😎 О, ты умеешь выражать эмоции! А я умею делать вкусный кальян! 😉",
@@ -117,13 +158,34 @@ def handle_emoji_short(user_id, message, send_func):
             return True
     return False
 
+
 def handle_random_joke(user_id, send_func):
+    """
+    С вероятностью 40% отправляет случайную шутку.
+    
+    Args:
+        user_id (int): ID пользователя
+        send_func (callable): Функция отправки сообщения
+        
+    Returns:
+        bool: True если шутка была отправлена, иначе False
+    """
     if random.random() < 0.4:
         send_func(user_id, random.choice(RANDOM_JOKES), keyboard=kb.get_main_keyboard())
         return True
     return False
 
+
 def handle_sticker(vk, user_id, sticker_data, send_func):
+    """
+    Обрабатывает отправку стикеров.
+    
+    Args:
+        vk: Объект VK API
+        user_id (int): ID пользователя
+        sticker_data: Данные стикера
+        send_func (callable): Функция отправки сообщения
+    """
     sticker_responses = [
         "🧞 Ого, стикер! Я – джинн, а не коллекционер стикеров, но мне нравится твой вкус! 😄",
         "🎨 Стикер – это круто! А ты знаешь, что у нас есть стикеры в группе? Правда, я их не покажу 😉",

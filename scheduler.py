@@ -1,4 +1,8 @@
 # scheduler.py
+"""
+Планировщик задач для бота.
+Выполняет регулярные задачи: напоминания неактивным гостям и розыгрыши.
+"""
 import schedule
 import time
 import threading
@@ -7,6 +11,7 @@ from datetime import datetime, timedelta
 import database as db
 import google_sheets as gs
 from config import GROUP_ID, logger
+
 
 REMINDER_MESSAGES = [
     "🧞 Эй, {name}! Я тут скучаю по твоему дыму! Давно не виделись. У нас новый вкус – «Черничный бум». Приходи, попробуем вместе?",
@@ -17,20 +22,37 @@ REMINDER_MESSAGES = [
     "👀 {name}, а мы тут новый кальянщик появился, классно шарит. Приходи оценить. Или просто пообщаемся? 😄"
 ]
 
+
 def weekly_raffle(vk, send_func):
+    """
+    Проводит еженедельный розыгрыш.
+    Выбирает победителя из участников активного розыгрыша,
+    отправляет уведомление и создаёт новый розыгрыш.
+    
+    Args:
+        vk: Объект VK API
+        send_func (callable): Функция отправки сообщения
+    """
     active_raffle = db.get_active_raffle()
     if not active_raffle:
         logger.info("Нет активного розыгрыша для завершения.")
         return
+    
     raffle_id = active_raffle[0]
     prize = active_raffle[1]
     participants = db.get_raffle_participants(raffle_id)
+    
     if not participants:
         logger.info("Нет участников в розыгрыше.")
         return
+    
     winner = random.choice(participants)
     db.finish_raffle(raffle_id, winner)
+    
+    # Уведомляем победителя
     send_func(winner, f"🎉 ПОЗДРАВЛЯЮ! Ты выиграл **{prize}**! Приходи в течение 7 дней!")
+    
+    # Публикуем пост в группе
     try:
         vk.wall.post(
             owner_id=-int(GROUP_ID),
@@ -38,39 +60,84 @@ def weekly_raffle(vk, send_func):
         )
     except Exception as e:
         logger.error(f"Не удалось опубликовать пост: {e}")
+    
+    # Создаём новый розыгрыш
     db.create_raffle()
-    logger.info(f"✅ Новый розыгрыш создан с призом: {db.get_active_raffle()[1]}")
+    new_prize = db.get_active_raffle()[1]
+    logger.info(f"✅ Новый розыгрыш создан с призом: {new_prize}")
+
 
 def remind_inactive_guests(vk, send_func):
+    """
+    Отправляет напоминания неактивным гостям.
+    Выбирает гостей, у которых не было активности 7 дней,
+    и которым не отправляли напоминание 14 дней.
+    
+    Args:
+        vk: Объект VK API
+        send_func (callable): Функция отправки сообщения
+    """
     now = datetime.now()
     week_ago = (now - timedelta(days=7)).isoformat()
     two_weeks_ago = (now - timedelta(days=14)).isoformat()
+    
     db.cursor.execute('''
         SELECT vk_id, name FROM guests 
         WHERE (last_activity IS NULL OR last_activity < ?) 
           AND (last_reminder IS NULL OR last_reminder < ?)
     ''', (week_ago, two_weeks_ago))
+    
     rows = db.cursor.fetchall()
+    
     for vk_id, name in rows:
         msg = random.choice(REMINDER_MESSAGES).format(name=name or "Гость")
         try:
             send_func(vk_id, msg)
-            db.cursor.execute("UPDATE guests SET last_reminder=? WHERE vk_id=?", (now.isoformat(), vk_id))
+            db.cursor.execute(
+                "UPDATE guests SET last_reminder=? WHERE vk_id=?",
+                (now.isoformat(), vk_id)
+            )
             db.conn.commit()
+            
             now_str = now.strftime("%d.%m.%Y %H:%M:%S")
             gs.update_guest_sheet(vk_id, last_reminder=now_str)
             logger.info(f"📨 Напоминание отправлено гостю {vk_id}")
         except Exception as e:
             logger.error(f"❌ Не удалось отправить напоминание {vk_id}: {e}")
 
+
 def run_scheduler(vk, send_func):
+    """
+    Запускает основной цикл планировщика.
+    Выполняется в отдельном потоке.
+    
+    Args:
+        vk: Объект VK API
+        send_func (callable): Функция отправки сообщения
+    """
+    # Запланированные задачи
     schedule.every().day.at("12:00").do(remind_inactive_guests, vk, send_func)
     schedule.every().sunday.at("20:00").do(weekly_raffle, vk, send_func)
-    # Резервное копирование убрано (функция backup_database не используется)
+    
+    logger.info("⏰ Планировщик запущен: напоминания в 12:00, розыгрыши в воскресенье 20:00")
+    
     while True:
         schedule.run_pending()
         time.sleep(60)
 
+
 def start_scheduler(vk, send_func):
+    """
+    Запускает планировщик в отдельном потоке.
+    
+    Args:
+        vk: Объект VK API
+        send_func (callable): Функция отправки сообщения
+        
+    Returns:
+        threading.Thread: Поток планировщика
+    """
     thread = threading.Thread(target=run_scheduler, args=(vk, send_func), daemon=True)
     thread.start()
+    logger.info("✅ Планировщик запущен в отдельном потоке")
+    return thread

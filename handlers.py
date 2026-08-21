@@ -9,7 +9,7 @@ import keyboards as kb
 import utils
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-from handlers_modules.registration import handle_new_guest, handle_registration_step
+# Убраны неиспользуемые импорты handle_new_guest, handle_registration_step
 from handlers_modules.profile import handle_profile
 from handlers_modules.visits import (
     handle_visit_button,
@@ -61,27 +61,12 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         return True
 
     # ===== ОТЗЫВЫ =====
-    awaiting = db.get_awaiting_review(user_id)
     if handle_review_response(vk, user_id, guest, message, send_func):
         return True
 
-    # ===== УДАЛЕНИЕ ГОСТЯ (КНОПКА) =====
-    if message == '🗑️ Удалить гостя' and user_id in ADMIN_IDS:
-        send_func(
-            user_id,
-            "🗑️ **УДАЛЕНИЕ ГОСТЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Введи ID гостя, которого хочешь удалить:\n"
-            "Например: /delete_guest 123456789\n\n"
-            "⚠️ ВНИМАНИЕ: гость будет удалён из:\n"
-            "   • Базы данных (SQLite)\n"
-            "   • Google Таблицы\n\n"
-            "Это действие **НЕЛЬЗЯ ОТМЕНИТЬ**!\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        )
-        return True
-
-    # ===== АДМИН-МЕНЮ =====
+    # ============================================================
+    # АДМИН-МЕНЮ (кнопка)
+    # ============================================================
     if message == '📊 Админ-меню' and user_id in ADMIN_IDS:
         send_func(
             user_id,
@@ -139,7 +124,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
             send_func(user_id, "Нет гостей.", keyboard=kb.get_admin_menu_keyboard())
         return True
 
-    # ===== АДМИН-КОМАНДЫ =====
+    # ============================================================
+    # АДМИН-КОМАНДЫ (через текст)
+    # ============================================================
     if user_id in ADMIN_IDS:
         if low_msg == '/status':
             handle_status(vk, user_id, send_func)
@@ -148,28 +135,38 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
             handle_stat(vk, user_id, send_func)
             return True
 
-    # ===== КОМАНДА /visit (ручной ввод кода) =====
+    # ============================================================
+    # КОМАНДА /visit (ручной ввод кода)
+    # ============================================================
     if low_msg.startswith('/visit'):
         return handle_visit_manual(vk, user_id, guest, message, send_func)
 
-    # ===== ЗАЯВКА НА ВИЗИТ =====
+    # ============================================================
+    # ЗАЯВКА НА ВИЗИТ (текст)
+    # ============================================================
     if 'визит' in low_msg or 'заявка' in low_msg:
         logger.info(f"✅ Заявка на визит от {user_id}, текст: '{message}'")
         return handle_visit_request(vk, user_id, guest, message, send_func)
 
-    # ===== КНОПКИ АДМИНИСТРАТОРА =====
+    # ============================================================
+    # КНОПКИ АДМИНИСТРАТОРА (подтверждение/отклонение визита)
+    # ============================================================
     if message.startswith('✅ Подтвердить ') or message.startswith('✅ подтвердить '):
         return handle_admin_confirm(vk, user_id, message, send_func)
 
     if message.startswith('❌ Отклонить ') or message.startswith('❌ отклонить '):
         return handle_admin_reject(vk, user_id, message, send_func)
 
-    # ===== НАЗАД =====
+    # ============================================================
+    # КНОПКА "НАЗАД" (для всех)
+    # ============================================================
     if message == '🔙 Назад':
         send_func(user_id, "Главное меню:", keyboard=kb.get_main_keyboard(user_id))
         return True
 
-    # ===== УЧАСТИЕ В РОЗЫГРЫШЕ =====
+    # ============================================================
+    # УЧАСТИЕ В РОЗЫГРЫШЕ
+    # ============================================================
     if message == '✅ Участвую':
         return handle_raffle_participate(user_id, send_func)
 
@@ -177,26 +174,34 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         send_func(user_id, "Ты уже в списке участников! Жди розыгрыша в воскресенье.", keyboard=kb.get_main_keyboard(user_id))
         return True
 
-    # ===== АКЦИИ =====
+    # ============================================================
+    # АКЦИИ
+    # ============================================================
     if message == '🔥 Акции' or low_msg == '/promo':
         handle_promo(user_id, send_func)
         return True
 
-    # ===== КОМАНДА /birth =====
+    # ============================================================
+    # КОМАНДА /birth
+    # ============================================================
     if low_msg.startswith('/birth '):
         birth = message[7:].strip()
         if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', birth):
-            db.cursor.execute("UPDATE guests SET birth=? WHERE vk_id=?", (birth, user_id))
+            # ВАЖНО: добавляем registration_step = 3
+            db.cursor.execute(
+                "UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?",
+                (birth, user_id)
+            )
             db.conn.commit()
-            gs.update_guest_sheet(user_id, birth=birth)
+            gs.update_guest_sheet(user_id, birth=birth, registration_step=3)
             send_func(
                 user_id,
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🎂 ДЕНЬ РОЖДЕНИЯ СОХРАНЁН!\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎂 ДЕНЬ РОЖДЕНИЯ СОХРАНЁН!\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"Отлично! Записал: {birth}\n"
-                "Теперь подарок точно найдёт своего хозяина! 😎\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                f"Теперь подарок точно найдёт своего хозяина! 😎\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━",
                 keyboard=kb.get_main_keyboard(user_id)
             )
         else:
@@ -212,17 +217,23 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
             )
         return True
 
-    # ===== ПРОФИЛЬ =====
+    # ============================================================
+    # ПРОФИЛЬ
+    # ============================================================
     if message == '👤 Профиль' or low_msg == '/profile':
         handle_profile(vk, user_id, guest, send_func)
         return True
 
-    # ===== РОЗЫГРЫШ =====
+    # ============================================================
+    # РОЗЫГРЫШ
+    # ============================================================
     if message == '🎁 Розыгрыш' or low_msg == '/raffle':
         handle_raffle_info(user_id, guest, send_func)
         return True
 
-    # ===== УРОВНИ (команда /levelinfo) =====
+    # ============================================================
+    # УРОВНИ (команда /levelinfo)
+    # ============================================================
     if low_msg == '/levelinfo':
         lines = [
             "━━━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -237,7 +248,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         send_func(user_id, "\n".join(lines), keyboard=kb.get_main_keyboard(user_id))
         return True
 
-    # ===== АДМИН-КОМАНДЫ =====
+    # ============================================================
+    # АДМИН-КОМАНДЫ (через /)
+    # ============================================================
     if low_msg.startswith('/newvisit') and user_id in ADMIN_IDS:
         handle_admin_newvisit(vk, user_id, message, send_func)
         return True
@@ -250,12 +263,13 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         handle_admin_draw(vk, user_id, send_func)
         return True
 
-    # ===== УДАЛЕНИЕ ГОСТЯ (КОМАНДА) =====
     if low_msg.startswith('/delete_guest') and user_id in ADMIN_IDS:
         handle_delete_guest(vk, user_id, message, send_func)
         return True
 
-    # ===== МАССОВАЯ РАССЫЛКА =====
+    # ============================================================
+    # МАССОВАЯ РАССЫЛКА (/notify)
+    # ============================================================
     if low_msg.startswith('/notify') and user_id in ADMIN_IDS:
         parts = message.split(maxsplit=1)
         if len(parts) < 2:
@@ -314,7 +328,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         )
         return True
 
-    # ===== КНОПКА "ТВОЙ МАСТЕР" =====
+    # ============================================================
+    # КНОПКА "ТВОЙ МАСТЕР"
+    # ============================================================
     if message == '🤵 Твой Мастер' or low_msg == '/book':
         name, phone = gs.get_today_master()
         responses = [
@@ -337,7 +353,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
         return True
 
-    # ===== КНОПКА "СОЗДАТЕЛЬ" =====
+    # ============================================================
+    # КНОПКА "СОЗДАТЕЛЬ"
+    # ============================================================
     if message == '✍️ Создатель':
         text = (
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -355,7 +373,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
         return True
 
-    # ===== ПОМОЩЬ =====
+    # ============================================================
+    # ПОМОЩЬ
+    # ============================================================
     if message == '❓ Помощь' or low_msg == '/help':
         text = (
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -385,6 +405,9 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
         send_func(user_id, text, keyboard=kb.get_main_keyboard(user_id))
         return True
 
+    # ============================================================
+    # СЛУЧАЙНАЯ ШУТКА
+    # ============================================================
     if handle_random_joke(user_id, send_func):
         return True
 
@@ -394,8 +417,6 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
 __all__ = [
     'send_message',
     'handle_main_menu',
-    'handle_new_guest',
-    'handle_registration_step',
     'handle_sticker',
     'update_command_count',
     'update_message_count',

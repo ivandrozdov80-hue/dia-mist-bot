@@ -4,12 +4,36 @@ from oauth2client.service_account import ServiceAccountCredentials
 from config import CRED_FILE, SHEET_URL, logger
 from datetime import datetime
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(CRED_FILE, scope)
-gc = gspread.authorize(creds)
-sheet = gc.open_by_url(SHEET_URL).sheet1
+# ============================================================
+# ЛЕНИВАЯ ЗАГРУЗКА КРЕДОВ (при импорте не подключаемся)
+# ============================================================
+_client = None
+_spreadsheet = None
+_sheet = None
 
-# Простой кэш для vk_id -> row_number (чтобы не искать каждый раз)
+SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+def _get_client():
+    global _client
+    if _client is None:
+        creds = ServiceAccountCredentials.from_json_keyfile_name(CRED_FILE, SCOPES)
+        _client = gspread.authorize(creds)
+    return _client
+
+def _get_sheet():
+    global _sheet, _spreadsheet
+    if _sheet is None:
+        _spreadsheet = _get_client().open_by_url(SHEET_URL)
+        _sheet = _spreadsheet.sheet1
+    return _sheet
+
+def get_sheet():
+    """Возвращает объект листа Google Sheets (с ленивой загрузкой)."""
+    return _get_sheet()
+
+# ============================================================
+# КЭШ
+# ============================================================
 _vk_cache = {}
 
 def _vk_to_str(vk_id):
@@ -35,6 +59,7 @@ def find_row_by_vk(vk_id):
         return _vk_cache[vk_dot]
     
     try:
+        sheet = _get_sheet()
         col_a = sheet.col_values(1)
         for i, val in enumerate(col_a, start=1):
             val_str = str(val).strip()
@@ -46,21 +71,22 @@ def find_row_by_vk(vk_id):
     return None
 
 def invalidate_cache(vk_id=None):
+    """Очищает кэш для конкретного гостя или полностью."""
     if vk_id:
         vk_str = _vk_to_str(vk_id)
         _vk_cache.pop(vk_str, None)
         _vk_cache.pop(_vk_with_dot(vk_id), None)
+        logger.debug(f"🗑️ Кэш очищен для гостя {vk_id}")
     else:
         _vk_cache.clear()
-
-def get_sheet():
-    return sheet
+        logger.debug("🗑️ Весь кэш очищен")
 
 def add_guest_to_sheet(vk_id, name):
     try:
+        sheet = _get_sheet()
         now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         vk_str = _vk_to_str(vk_id)
-        # 15 колонок
+        # 15 колонок: A-O
         row = [vk_str, name, '', '', now, 0, 1, 'active', now, 0, '', '', 0, 0, 0]
         sheet.append_row(row)
         _vk_cache[vk_str] = len(sheet.col_values(1))
@@ -70,61 +96,70 @@ def add_guest_to_sheet(vk_id, name):
 
 def update_guest_sheet(vk_id, **kwargs):
     try:
+        sheet = _get_sheet()
         row_num = find_row_by_vk(vk_id)
         if row_num is None:
             logger.warning(f"⚠️ Строка для vk_id {vk_id} не найдена")
             return
+        
         updates = []
-        if 'visits' in kwargs:
-            updates.append({'range': f'F{row_num}', 'values': [[kwargs['visits']]]})
-        if 'level' in kwargs:
-            updates.append({'range': f'G{row_num}', 'values': [[kwargs['level']]]})
-        if 'status' in kwargs:
-            updates.append({'range': f'H{row_num}', 'values': [[kwargs['status']]]})
-        if 'updated_at' in kwargs:
-            updates.append({'range': f'I{row_num}', 'values': [[kwargs['updated_at']]]})
-        if 'phone' in kwargs:
-            updates.append({'range': f'C{row_num}', 'values': [[kwargs['phone']]]})
-        if 'birth' in kwargs:
-            updates.append({'range': f'D{row_num}', 'values': [[kwargs['birth']]]})
-        if 'registration_step' in kwargs:
-            updates.append({'range': f'J{row_num}', 'values': [[kwargs['registration_step']]]})
-        if 'last_activity' in kwargs:
-            updates.append({'range': f'K{row_num}', 'values': [[kwargs['last_activity']]]})
-        if 'last_reminder' in kwargs:
-            updates.append({'range': f'L{row_num}', 'values': [[kwargs['last_reminder']]]})
-        if 'visits_in_cycle' in kwargs:
-            updates.append({'range': f'M{row_num}', 'values': [[kwargs['visits_in_cycle']]]})
-        if 'free_visit_available' in kwargs:
-            updates.append({'range': f'N{row_num}', 'values': [[kwargs['free_visit_available']]]})
-        if 'agreement_given' in kwargs:
-            updates.append({'range': f'O{row_num}', 'values': [[kwargs['agreement_given']]]})
+        
+        # Маппинг полей на колонки
+        field_map = {
+            'visits': 'F',
+            'level': 'G',
+            'status': 'H',
+            'updated_at': 'I',
+            'phone': 'C',
+            'birth': 'D',
+            'registration_step': 'J',
+            'last_activity': 'K',
+            'last_reminder': 'L',
+            'visits_in_cycle': 'M',
+            'free_visit_available': 'N',
+            'agreement_given': 'O',
+        }
+        
+        for field, col in field_map.items():
+            if field in kwargs:
+                updates.append({'range': f'{col}{row_num}', 'values': [[kwargs[field]]]})
+        
         if updates:
             sheet.batch_update(updates)
-        logger.info(f"✅ Обновлены данные для гостя {vk_id}")
+            logger.info(f"✅ Обновлены данные для гостя {vk_id} (обновлено {len(updates)} полей)")
     except Exception as e:
         logger.error(f"Ошибка обновления Google Sheets: {e}")
 
 def get_today_master():
     try:
-        local_creds = ServiceAccountCredentials.from_json_keyfile_name(CRED_FILE, scope)
-        local_gc = gspread.authorize(local_creds)
-        master_sheet = local_gc.open_by_url(SHEET_URL).worksheet("Мастера")
+        client = _get_client()
+        spreadsheet = client.open_by_url(SHEET_URL)
+        master_sheet = spreadsheet.worksheet("Мастера")
         records = master_sheet.get_all_records()
         today_day = datetime.now().day
         for row in records:
-            if int(row.get('День', -1)) == today_day:
-                return row.get('Имя', 'Мастер'), row.get('Телефон', 'Не указан')
+            try:
+                if int(row.get('День', -1)) == today_day:
+                    return row.get('Имя', 'Мастер'), row.get('Телефон', 'Не указан')
+            except (TypeError, ValueError):
+                continue
     except Exception as e:
         logger.error(f"Ошибка при получении мастера: {e}")
     return "Администратор", "+7-999-000-00-00"
 
 def ensure_guest_in_sheet(vk_id, guest_data):
+    """
+    Проверяет, что гость есть в таблице, и восстанавливает данные.
+    Вызывается на каждое сообщение, поэтому использует кэш.
+    """
     try:
+        sheet = _get_sheet()
         row_num = find_row_by_vk(vk_id)
+        
         if row_num is None:
             now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             vk_str = _vk_to_str(vk_id)
+            # 15 колонок: A-O
             row = [
                 vk_str,
                 guest_data[1] or '',
@@ -147,14 +182,20 @@ def ensure_guest_in_sheet(vk_id, guest_data):
             logger.info(f"✅ Добавлена новая строка для гостя {vk_id}")
         else:
             current_row = sheet.row_values(row_num)
-            if not current_row[2] and guest_data[2]:
-                sheet.update_cell(row_num, 3, guest_data[2])
-                logger.info(f"🔄 Восстановлен телефон для гостя {vk_id}")
-            if not current_row[3] and guest_data[3]:
-                sheet.update_cell(row_num, 4, guest_data[3])
-                logger.info(f"🔄 Восстановлена дата рождения для гостя {vk_id}")
-            if len(current_row) < 15 and guest_data[14]:
-                sheet.update_cell(row_num, 15, guest_data[14])
-                logger.info(f"🔄 Восстановлено согласие для гостя {vk_id}")
+            # Восстанавливаем телефон (колонка C, индекс 2)
+            if len(current_row) < 3 or not current_row[2]:
+                if guest_data[2]:
+                    sheet.update_cell(row_num, 3, guest_data[2])
+                    logger.info(f"🔄 Восстановлен телефон для гостя {vk_id}")
+            # Восстанавливаем дату рождения (колонка D, индекс 3)
+            if len(current_row) < 4 or not current_row[3]:
+                if guest_data[3]:
+                    sheet.update_cell(row_num, 4, guest_data[3])
+                    logger.info(f"🔄 Восстановлена дата рождения для гостя {vk_id}")
+            # Восстанавливаем согласие (колонка O, индекс 14)
+            if len(current_row) < 15:
+                if guest_data[14]:
+                    sheet.update_cell(row_num, 15, guest_data[14])
+                    logger.info(f"🔄 Восстановлено согласие для гостя {vk_id}")
     except Exception as e:
         logger.error(f"⚠️ Ошибка при проверке/восстановлении гостя: {e}")
