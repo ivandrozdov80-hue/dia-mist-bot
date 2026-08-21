@@ -9,7 +9,6 @@ import keyboards as kb
 import utils
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-# Убраны неиспользуемые импорты handle_new_guest, handle_registration_step
 from handlers_modules.profile import handle_profile
 from handlers_modules.visits import (
     handle_visit_button,
@@ -30,7 +29,7 @@ from handlers_modules.admin import (
 from handlers_modules.greetings import handle_greeting, handle_emoji_short, handle_random_joke, handle_sticker
 from handlers_modules.promo import handle_promo
 from handlers_modules.help import handle_help
-from handlers_modules.utils import update_command_count, update_message_count, update_raffle_participation
+from handlers_modules.utils import update_command_count, update_raffle_participation
 from handlers_modules.reviews import handle_review_response
 
 
@@ -187,7 +186,6 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     if low_msg.startswith('/birth '):
         birth = message[7:].strip()
         if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', birth):
-            # ВАЖНО: добавляем registration_step = 3
             db.cursor.execute(
                 "UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?",
                 (birth, user_id)
@@ -419,6 +417,5 @@ __all__ = [
     'handle_main_menu',
     'handle_sticker',
     'update_command_count',
-    'update_message_count',
     'update_raffle_participation'
 ]
