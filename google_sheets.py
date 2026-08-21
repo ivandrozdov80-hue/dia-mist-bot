@@ -226,11 +226,9 @@ def delete_guest_by_id(vk_id):
         
         if row_num is None:
             logger.info(f"Гость {vk_id} не найден в таблице — пропускаем")
-            return True  # Если его нет, считаем успехом
+            return True
         
         sheet.delete_rows(row_num)
-        
-        # Очищаем кэш для этого гостя
         invalidate_cache(vk_id)
         
         logger.info(f"🗑️ Гость {vk_id} удалён из Google Sheets (строка {row_num})")
@@ -245,20 +243,15 @@ def delete_guest_by_id(vk_id):
 def clear_system_cache():
     """
     Сбрасывает кэш Google Sheets, создавая новое подключение.
-    Используй, если данные в таблице изменились вручную, но бот их не видит.
     """
     try:
         global _client, _spreadsheet, _sheet, _vk_cache
         
-        # 1. Сбрасываем все глобальные переменные (принудительно переподключаемся)
         _client = None
         _spreadsheet = None
         _sheet = None
-        
-        # 2. Очищаем кэш поиска строк
         _vk_cache.clear()
         
-        # 3. Принудительно перечитываем все данные (создаем новое подключение)
         sheet = _get_sheet()
         sheet.get_all_values()
         
@@ -269,12 +262,11 @@ def clear_system_cache():
         return False
 
 # ============================================================
-# ВОССТАНОВЛЕНИЕ ГОСТЕЙ ИЗ БД (ДОБАВЛЕНО)
+# ВОССТАНОВЛЕНИЕ ГОСТЕЙ (ДОБАВЛЕНО)
 # ============================================================
 def restore_all_guests_from_db():
     """
     Восстанавливает всех гостей из SQLite в Google Таблицу.
-    Проходит по БД и добавляет отсутствующих в таблице.
     """
     try:
         import database as db
@@ -283,15 +275,12 @@ def restore_all_guests_from_db():
         restored_count = 0
         
         for g in guests:
-            # g - кортеж (vk_id, name, phone, birth, created_at, visits, level, status, updated_at, reg_step, last_activity, last_reminder, visits_in_cycle, free_visit_available, agreement_given)
             vk_id = g[0]
             name = g[1]
             
-            # Проверяем, есть ли уже гость в таблице (через кэш или поиск)
             row_num = find_row_by_vk(vk_id)
             
             if row_num is None:
-                # Если нет — добавляем
                 add_guest_to_sheet(vk_id, name)
                 restored_count += 1
         

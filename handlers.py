@@ -20,11 +20,16 @@ from handlers_modules.visits import (
 from handlers_modules.raffle import handle_raffle_info, handle_raffle_participate
 from handlers_modules.admin import (
     handle_admin_newvisit,
+    handle_admin_command,
     handle_admin_create_raffle,
     handle_admin_draw,
     handle_status,
     handle_stat,
-    handle_delete_guest
+    handle_delete_guest,
+    delete_guest,
+    list_guests,
+    clear_cache,
+    restore_guests
 )
 from handlers_modules.greetings import handle_greeting, handle_emoji_short, handle_random_joke, handle_sticker
 from handlers_modules.promo import handle_promo

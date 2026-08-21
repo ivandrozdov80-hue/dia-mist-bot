@@ -2,8 +2,11 @@
 import logging
 import database as db
 import google_sheets as gs
-from config import ADMIN_IDS
+import utils
+from config import ADMIN_IDS, PRIZES
 from datetime import datetime
+import re
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -143,3 +146,118 @@ def restore_guests(vk, user_id, send_func):
     send_func(user_id, "⏳ Восстанавливаю гостей из базы данных...")
     count = gs.restore_all_guests_from_db()
     send_func(user_id, f"✅ Готово! Восстановлено гостей: {count}")
+
+# ============================================================
+# СОЗДАНИЕ ВИЗИТА (для /newvisit)
+# ============================================================
+def handle_admin_create_raffle(vk, user_id, message, send_func):
+    if not is_admin(user_id):
+        send_func(user_id, "⛔ Только для администратора!")
+        return
+    
+    parts = message.split(maxsplit=1)
+    
+    if len(parts) == 1:
+        prize = random.choice(PRIZES)
+        db.create_raffle(prize)
+        send_func(
+            user_id,
+            f"✅ Создан розыгрыш с призом:\n**{prize}**\n(выбран случайно)"
+        )
+    else:
+        prize = parts[1].strip()
+        db.create_raffle(prize)
+        send_func(
+            user_id,
+            f"✅ Создан розыгрыш с призом:\n**{prize}**"
+        )
+
+# ============================================================
+# ПРОВЕДЕНИЕ РОЗЫГРЫША (для /draw)
+# ============================================================
+def handle_admin_draw(vk, user_id, send_func):
+    if not is_admin(user_id):
+        send_func(user_id, "⛔ Только для администратора!")
+        return
+    
+    active_raffle = db.get_active_raffle()
+    if not active_raffle:
+        send_func(user_id, "❌ Нет активного розыгрыша.")
+        return
+    
+    raffle_id = active_raffle[0]
+    prize = active_raffle[1]
+    participants = db.get_raffle_participants(raffle_id)
+    
+    if not participants:
+        send_func(user_id, "❌ Нет участников. Розыгрыш отменён.")
+        return
+    
+    winner = random.choice(participants)
+    db.finish_raffle(raffle_id, winner)
+    
+    send_func(winner, f"🎉 ПОЗДРАВЛЯЮ! Ты выиграл **{prize}**! Приходи в течение 7 дней!")
+    send_func(user_id, f"✅ Победитель выбран! ID: {winner}\nПриз: {prize}")
+    
+    new_prize = random.choice(PRIZES)
+    db.create_raffle(new_prize)
+    logger.info(f"✅ Создан новый розыгрыш с призом: {new_prize}")
+
+# ============================================================
+# СТАТУС (для /status)
+# ============================================================
+def handle_status(vk, user_id, send_func):
+    if not is_admin(user_id):
+        send_func(user_id, "⛔ Только для администратора!")
+        return
+    
+    total_guests = len(db.get_all_guests())
+    active_raffle = db.get_active_raffle()
+    raffle_prize = active_raffle[1] if active_raffle else "Нет активного"
+    
+    text = (
+        "🔍 **СТАТУС БОТА**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 Всего гостей: {total_guests}\n"
+        f"🎁 Активный розыгрыш: {raffle_prize}\n"
+        f"⏰ Планировщик: работает\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    send_func(user_id, text, keyboard=None)
+
+# ============================================================
+# СТАТИСТИКА (для /stat)
+# ============================================================
+def handle_stat(vk, user_id, send_func):
+    if not is_admin(user_id):
+        send_func(user_id, "⛔ Только для администратора!")
+        return
+    
+    guests = db.get_all_guests()
+    total_visits = sum(g[5] for g in guests if len(g) > 5 and g[5])
+    
+    text = (
+        "📊 **СТАТИСТИКА**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 Всего гостей: {len(guests)}\n"
+        f"🌀 Всего визитов: {total_visits}\n"
+        f"📅 Дата: {datetime.now().strftime('%d.%m.%Y')}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    send_func(user_id, text, keyboard=None)
+
+# ============================================================
+# УДАЛЕНИЕ ГОСТЯ (для /delete_guest)
+# ============================================================
+def handle_delete_guest(vk, user_id, message, send_func):
+    if not is_admin(user_id):
+        send_func(user_id, "⛔ Только для администратора!")
+        return
+    
+    match = re.search(r'\d+', message)
+    if not match:
+        send_func(user_id, "❌ Укажи ID. Пример: /delete_guest 123456789")
+        return
+    
+    guest_id = int(match.group())
+    delete_guest(vk, user_id, guest_id, send_func)
