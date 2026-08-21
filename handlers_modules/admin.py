@@ -74,3 +74,36 @@ async def list_guests(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"🆔 {g[0]} | {g[1]} | 📞 {g[2] or 'нет'} | Визиты: {g[5] if len(g) > 5 else 0}\n"
     
     await update.message.reply_text(text[:4000])
+
+# ===== ОЧИСТКА КЭША =====
+async def clear_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /clear_cache — сбросить кэш Google Sheets"""
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Только для администратора!")
+        return
+    
+    await update.message.reply_text("⏳ Очищаю кэш...")
+    
+    result = gs.clear_system_cache()
+    
+    if result:
+        await update.message.reply_text("✅ Кэш Google Sheets очищен!")
+    else:
+        await update.message.reply_text("❌ Ошибка очистки кэша")
+
+# ===== ВОССТАНОВЛЕНИЕ ГОСТЕЙ =====
+async def restore_guests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /restore_guests — восстановить гостей из БД в таблицу"""
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Только для администратора!")
+        return
+    
+    await update.message.reply_text("⏳ Восстанавливаю гостей из базы данных...")
+    
+    count = gs.restore_all_guests_from_db()
+    
+    await update.message.reply_text(f"✅ Готово! Восстановлено гостей: {count}")
