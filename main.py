@@ -12,7 +12,7 @@ import handlers
 import scheduler
 import keyboards as kb
 
-from handlers_modules.registration import get_agreement_keyboard, AGREEMENT_TEXT_OLD, AGREEMENT_TEXT_NEW, PHONE_REQUEST_MESSAGES
+from handlers_modules.registration import get_agreement_keyboard, AGREEMENT_TEXT_OLD, AGREEMENT_TEXT_NEW, PHONE_REQUEST_MESSAGES, handle_registration_step
 
 scheduler_started = False
 _last_msg_time = {}
@@ -199,7 +199,7 @@ def run_bot():
                         # ============================================================
                         if not has_phone:
                             logger.info(f"📝 Гость {user_id} без телефона, запускаем регистрацию")
-                            if handlers.handle_registration_step(vk, user_id, guest, message, send_func):
+                            if handle_registration_step(vk, user_id, guest, message, send_func):
                                 guest = db.get_guest(user_id)
                                 continue
                             # Если не обработано — ждём ввод
@@ -273,7 +273,15 @@ def run_bot():
                                 continue
 
                         # ============================================================
-                        # 11. ГЛАВНОЕ МЕНЮ
+                        # 11. ОБРАБОТКА РЕГИСТРАЦИИ (если reg_step < 3)
+                        # ============================================================
+                        if reg_step < 3:
+                            if handle_registration_step(vk, user_id, guest, message, send_func):
+                                guest = db.get_guest(user_id)
+                                continue
+
+                        # ============================================================
+                        # 12. ГЛАВНОЕ МЕНЮ
                         # ============================================================
                         guest = db.get_guest(user_id)
                         handlers.handle_main_menu(vk, user_id, guest, message, send_func)
