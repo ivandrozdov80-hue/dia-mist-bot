@@ -1,34 +1,18 @@
 # admin_commands.py
 import logging
-from telegram import Update
-from telegram.ext import ContextTypes
-from config import ADMIN_IDS
 import database as db
 import google_sheets as gs
+from config import ADMIN_IDS
 
 logger = logging.getLogger(__name__)
 
 # ===== УДАЛЕНИЕ ГОСТЯ =====
-async def delete_guest(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /delete_guest <ID>"""
-    user_id = update.effective_user.id
-    
+def delete_guest(vk, user_id, guest_id, send_func):
+    """Вызывается из main.py при команде /delete_guest <ID>"""
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Только для администратора!")
+        send_func(user_id, "⛔ Только для администратора!")
         return
     
-    args = context.args
-    if not args:
-        await update.message.reply_text("📝 Укажи ID. Пример: /delete_guest 123456789")
-        return
-    
-    try:
-        guest_id = int(args[0])
-    except ValueError:
-        await update.message.reply_text("❌ ID должен быть числом!")
-        return
-    
-    # Получаем гостя из БД (у тебя в БД гости хранятся как кортежи)
     guest = db.get_guest(guest_id)
     
     result_text = f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🗑️ ГОСТЬ УДАЛЁН\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -41,69 +25,53 @@ async def delete_guest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     result_text += f"\n📊 Результат удаления:\n"
     
-    # 1. Удаляем из SQLite
     db_result = db.delete_guest(guest_id)
     result_text += f"   {'✅' if db_result else '❌'} База данных (SQLite)\n"
     
-    # 2. Удаляем из Google Sheets
     try:
         sheets_result = gs.delete_guest_by_id(guest_id)
         result_text += f"   {'✅' if sheets_result else '❌'} Google Sheets\n"
     except Exception as e:
         result_text += f"   ❌ Google Sheets: {e}\n"
     
-    await update.message.reply_text(result_text)
+    send_func(user_id, result_text)
 
 # ===== СПИСОК ГОСТЕЙ =====
-async def list_guests(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /list_guests"""
-    user_id = update.effective_user.id
-    
+def list_guests(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Только для администратора!")
+        send_func(user_id, "⛔ Только для администратора!")
         return
     
     guests = db.get_all_guests()
     if not guests:
-        await update.message.reply_text("📭 База пуста")
+        send_func(user_id, "📭 База пуста")
         return
     
     text = "📋 СПИСОК ГОСТЕЙ:\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     for g in guests:
-        # g - кортеж: (id, name, phone, birth, ..., visits, ...)
         text += f"🆔 {g[0]} | {g[1]} | 📞 {g[2] or 'нет'} | Визиты: {g[5] if len(g) > 5 else 0}\n"
     
-    await update.message.reply_text(text[:4000])
+    send_func(user_id, text[:4000])
 
 # ===== ОЧИСТКА КЭША =====
-async def clear_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /clear_cache — сбросить кэш Google Sheets"""
-    user_id = update.effective_user.id
-    
+def clear_cache(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Только для администратора!")
+        send_func(user_id, "⛔ Только для администратора!")
         return
     
-    await update.message.reply_text("⏳ Очищаю кэш...")
-    
+    send_func(user_id, "⏳ Очищаю кэш...")
     result = gs.clear_system_cache()
-    
     if result:
-        await update.message.reply_text("✅ Кэш Google Sheets очищен!")
+        send_func(user_id, "✅ Кэш Google Sheets очищен!")
     else:
-        await update.message.reply_text("❌ Ошибка очистки кэша")
+        send_func(user_id, "❌ Ошибка очистки кэша")
 
 # ===== ВОССТАНОВЛЕНИЕ ГОСТЕЙ =====
-async def restore_guests(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /restore_guests — восстановить гостей из БД в таблицу"""
-    user_id = update.effective_user.id
-    
+def restore_guests(vk, user_id, send_func):
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Только для администратора!")
+        send_func(user_id, "⛔ Только для администратора!")
         return
     
-    await update.message.reply_text("⏳ Восстанавливаю гостей из базы данных...")
-    
+    send_func(user_id, "⏳ Восстанавливаю гостей из базы данных...")
     count = gs.restore_all_guests_from_db()
-    
-    await update.message.reply_text(f"✅ Готово! Восстановлено гостей: {count}")
+    send_func(user_id, f"✅ Готово! Восстановлено гостей: {count}")

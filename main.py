@@ -11,6 +11,7 @@ import google_sheets as gs
 import handlers
 import scheduler
 import keyboards as kb
+import admin_commands
 
 from handlers_modules.registration import get_agreement_keyboard, AGREEMENT_TEXT_OLD, AGREEMENT_TEXT_NEW, PHONE_REQUEST_MESSAGES, handle_registration_step
 
@@ -141,6 +142,29 @@ def run_bot():
                                     "━━━━━━━━━━━━━━━━━━━━━━━━━━",
                                     keyboard=kb.get_main_keyboard(user_id)
                                 )
+                            continue
+
+                        # ============================================================
+                        # 5.1 ОБРАБОТКА АДМИН-КОМАНД
+                        # ============================================================
+                        if message.lower().startswith('/delete_guest '):
+                            try:
+                                target_id = int(message.split()[1])
+                                admin_commands.delete_guest(vk, user_id, target_id, send_func)
+                            except:
+                                send_func(user_id, "❌ Неверный ID. Пример: /delete_guest 123456789")
+                            continue
+
+                        if message.lower().startswith('/list_guests'):
+                            admin_commands.list_guests(vk, user_id, send_func)
+                            continue
+
+                        if message.lower().startswith('/clear_cache'):
+                            admin_commands.clear_cache(vk, user_id, send_func)
+                            continue
+
+                        if message.lower().startswith('/restore_guests'):
+                            admin_commands.restore_guests(vk, user_id, send_func)
                             continue
 
                         # ============================================================
