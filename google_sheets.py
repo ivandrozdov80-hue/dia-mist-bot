@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 # ===== НАСТРОЙКИ =====
 CRED_FILE = 'credentials.json'
 SHEET_ID = '1BS-h_Oq70P2G9cTR5K7yUS8KadkUpcH9ymrMKx-NYIo'
-SHEET_NAME = 'Лист1'  # Если название другое — поменяй
+SHEET_NAME = 'Лист1'  # Если название листа другое — замени
 
 # ===== ПОДКЛЮЧЕНИЕ =====
 def get_sheet():
@@ -86,7 +86,7 @@ def update_guest_sheet(guest_id, **kwargs):
         logger.error(f"❌ Ошибка обновления в Google Sheets: {e}")
         return False
 
-# ===== УДАЛЕНИЕ ГОСТЯ (НОВОЕ) =====
+# ===== УДАЛЕНИЕ ГОСТЯ =====
 def delete_guest_by_id(guest_id):
     """
     Удаляет гостя из Google Таблицы по ID.
@@ -126,3 +126,60 @@ def ensure_guest_in_sheet(guest_id, guest_data):
     except Exception as e:
         logger.error(f"❌ Ошибка проверки гостя: {e}")
         return False
+
+# ================== ОЧИСТКА КЭША ==================
+def clear_system_cache():
+    """
+    Сбрасывает кэш Google Sheets, создавая новое подключение.
+    """
+    try:
+        import gspread
+        from oauth2client.service_account import ServiceAccountCredentials
+        
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(CRED_FILE, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+        
+        # Принудительно читаем все данные, чтобы обновить кэш
+        sheet.get_all_values()
+        print("✅ Кэш Google Sheets успешно очищен")
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка очистки кэша: {e}")
+        return False
+
+# ================== ВОССТАНОВЛЕНИЕ ГОСТЕЙ ==================
+def restore_all_guests_from_db():
+    """
+    Восстанавливает всех гостей из SQLite в Google Таблицу.
+    """
+    try:
+        import database as db
+        
+        guests = db.get_all_guests()
+        restored_count = 0
+        
+        for g in guests:
+            guest_id = g[0]
+            name = g[1]
+            
+            # Проверяем, есть ли уже гость в таблице
+            sheet = get_sheet()
+            all_rows = sheet.get_all_values()
+            exists = False
+            
+            for row in all_rows:
+                if len(row) > 18 and str(row[18]) == str(guest_id):
+                    exists = True
+                    break
+            
+            if not exists:
+                add_guest_to_sheet(guest_id, name)
+                restored_count += 1
+        
+        print(f"✅ Восстановлено гостей: {restored_count}")
+        return restored_count
+    except Exception as e:
+        print(f"❌ Ошибка восстановления: {e}")
+        return 0
