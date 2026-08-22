@@ -7,6 +7,7 @@ import database as db
 import keyboards as kb
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from .utils import update_command_count, update_raffle_participation
+from config import PRIZE_DESCRIPTIONS
 
 
 def handle_raffle_info(user_id, guest, send_func):
@@ -32,11 +33,18 @@ def handle_raffle_info(user_id, guest, send_func):
     prize = active_raffle[1]
     is_participant = db.is_raffle_participant(raffle_id, user_id)
 
+    # Добавляем описание приза, если оно есть
+    description = PRIZE_DESCRIPTIONS.get(prize, "")
+    if description:
+        prize_text = f"{prize}\n📝 {description}"
+    else:
+        prize_text = prize
+
     text = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🎰 РОЗЫГРЫШ НЕДЕЛИ\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🎁 Приз: {prize}\n"
+        f"🎁 Приз: {prize_text}\n"
         "📅 Розыгрыш состоится в воскресенье в 20:00\n\n"
         "👥 Чтобы участвовать, нажми кнопку ниже!\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━"
