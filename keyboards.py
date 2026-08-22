@@ -26,12 +26,13 @@ def get_main_keyboard(user_id=None):
     keyboard.add_button('🔥 Акции', color=VkKeyboardColor.SECONDARY)
     keyboard.add_line()
     
-    # Ряд 2: Мастер, Розыгрыш
-    keyboard.add_button('🤵 Твой Мастер', color=VkKeyboardColor.SECONDARY)
+    # Ряд 2: Мастер/Бронь, Розыгрыш
+    keyboard.add_button('🤵 Мастер/Бронь', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('🎁 Розыгрыш', color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     
-    # Ряд 3: Создатель, Помощь
+    # Ряд 3: Отзывы, Создатель, Помощь
+    keyboard.add_button('⭐ Отзывы', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('✍️ Создатель', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('❓ Помощь', color=VkKeyboardColor.SECONDARY)
     

@@ -153,4 +153,5 @@ def apply_visit(user_id, code=None, send_message_func=None):
         remaining = FREE_HOOKAH_VISITS - visits_in_cycle
         promo_line = f"🔥 Бесплатный кальян: {visits_in_cycle}/{FREE_HOOKAH_VISITS} визитов (осталось {remaining})"
     
+    # Исправлено: убрал лишний элемент (было 7, стало 6)
     return (new_visits, new_level, level_name, promo_line, reached_six, False)

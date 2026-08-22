@@ -19,15 +19,30 @@ def is_admin(user_id):
 # ============================================================
 # РЕАГИРОВАНИЕ НА НОВЫЙ ВИЗИТ (вызывается из main.py)
 # ============================================================
-def handle_admin_newvisit(vk, user_id, guest, send_func):
+def handle_admin_newvisit(vk, user_id, message, send_func):
     """
     Функция, которая ожидается в __init__.py.
     Вызывается при новом визите гостя (админ-уведомление).
     """
-    if not is_admin(user_id):
+    import re
+    # Достаем ID гостя из текста сообщения
+    match = re.search(r'\[id(\d+)\|', message)
+    if not match:
+        parts = message.split()
+        if len(parts) == 2 and parts[1].isdigit():
+            target_id = int(parts[1])
+        else:
+            send_func(user_id, "Не могу найти ID гостя в команде. Пример: /newvisit [id123|Имя]")
+            return
+    else:
+        target_id = int(match.group(1))
+
+    guest = db.get_guest(target_id)
+    if not guest:
+        send_func(user_id, f"❌ Гость с ID {target_id} не найден в базе.")
         return
     
-    guest_name = guest[1] if guest else "Неизвестный"
+    guest_name = guest[1] if guest[1] else "Неизвестный"
     guest_phone = guest[2] if guest and len(guest) > 2 else "Не указан"
     visits = guest[5] if guest and len(guest) > 5 else 0
     
@@ -35,7 +50,7 @@ def handle_admin_newvisit(vk, user_id, guest, send_func):
         f"🔔 НОВЫЙ ВИЗИТ!\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 Гость: {guest_name}\n"
-        f"🆔 ID: {user_id}\n"
+        f"🆔 ID: {target_id}\n"
         f"📞 Телефон: {guest_phone}\n"
         f"📊 Визитов: {visits}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━"

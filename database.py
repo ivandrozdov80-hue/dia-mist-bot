@@ -80,6 +80,29 @@ class Database:
             if 'last_request_time' not in columns:
                 self.cursor.execute("ALTER TABLE guests ADD COLUMN last_request_time TEXT")
                 logger.info("✅ Добавлена колонка last_request_time")
+            
+            # ИСПРАВЛЕНИЕ: Миграция для таблицы розыгрышей
+            try:
+                raffle_columns = [row[1] for row in self.cursor.execute("PRAGMA table_info(raffles)").fetchall()]
+                if 'raffle_id' not in raffle_columns:
+                    logger.info("🔄 Обнаружена старая таблица raffles. Пересоздаю...")
+                    self.cursor.execute("ALTER TABLE raffles RENAME TO raffles_old")
+                    self.cursor.execute("""
+                        CREATE TABLE raffles (
+                            raffle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            prize TEXT,
+                            status TEXT DEFAULT 'active',
+                            winner_id INTEGER,
+                            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    self.cursor.execute("INSERT INTO raffles (raffle_id, prize, status, winner_id, created_at) SELECT * FROM raffles_old")
+                    self.cursor.execute("DROP TABLE raffles_old")
+                    self.conn.commit()
+                    logger.info("✅ Таблица raffles успешно мигрирована!")
+            except Exception as e:
+                logger.error(f"Ошибка миграции raffles: {e}")
+                
             self.conn.commit()
         except Exception as e:
             logger.error(f"Ошибка миграции: {e}")

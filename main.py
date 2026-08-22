@@ -139,9 +139,9 @@ def run_bot():
                         # ============================================================
                         guest = db.get_guest(user_id)
                         
-                        # Индексы колонок в БД:
-                        # 2 - phone, 3 - birth, 9 - registration_step, 25 - agreement_given
-                        agreement_given = guest[25] if len(guest) > 25 and guest[25] is not None else 0
+                        # Индексы колонок в БД: 
+                        # 2 - phone, 3 - birth, 9 - registration_step, 14 - agreement_given (правильно!)
+                        agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
                         has_phone = guest[2] is not None and guest[2] != ''
                         has_birth = guest[3] is not None and guest[3] != ''
                         reg_step = guest[9] if len(guest) > 9 and guest[9] is not None else 0
@@ -246,9 +246,9 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 9. ЕСЛИ НЕТ ДАТЫ РОЖДЕНИЯ — ПРЕДЛАГАЕМ ВВЕСТИ
+                        # 9. ЕСЛИ НЕТ ДАТЫ РОЖДЕНИЯ И ЕЩЁ НЕ ЗАВЕРШЕНА РЕГИСТРАЦИЯ (reg_step < 3) 
                         # ============================================================
-                        if not has_birth and has_phone:
+                        if not has_birth and reg_step < 3:
                             logger.info(f"📝 Гость {user_id} без даты рождения, предлагаем ввести")
                             send_func(
                                 user_id,
@@ -264,9 +264,9 @@ def run_bot():
                             continue
 
                         # ============================================================
-                        # 10. ОБРАБОТКА ВВОДА ДАТЫ РОЖДЕНИЯ
+                        # 10. ОБРАБОТКА ВВОДА ДАТЫ РОЖДЕНИЯ (если reg_step = 2)
                         # ============================================================
-                        if has_phone and not has_birth:
+                        if reg_step == 2 and has_phone and not has_birth:
                             if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', message):
                                 birth = message
                                 db.cursor.execute("UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?", (birth, user_id))
@@ -313,9 +313,9 @@ def run_bot():
                                 continue
 
                         # ============================================================
-                        # 11. ОБРАБОТКА РЕГИСТРАЦИИ
+                        # 11. ОБРАБОТКА РЕГИСТРАЦИИ (если шаг < 3, но телефон уже есть)
                         # ============================================================
-                        if reg_step < 3:
+                        if reg_step < 3 and has_phone:
                             if handle_registration_step(vk, user_id, guest, message, send_func):
                                 guest = db.get_guest(user_id)
                                 continue

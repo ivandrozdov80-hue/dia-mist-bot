@@ -21,7 +21,8 @@ def _send_visit_report(user_id, result, send_func):
         logger.error(f"Нет результата для отчёта гостю {user_id}")
         return
 
-    new_visits, new_level, level_name, _, promo_line, reached_six, free_used = result
+    # Исправлено: убрал 4-й элемент (пустой)
+    new_visits, new_level, level_name, promo_line, reached_six, free_used = result
 
     if free_used:
         report = (

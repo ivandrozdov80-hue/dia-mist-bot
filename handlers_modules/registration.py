@@ -342,7 +342,7 @@ def ensure_agreement(vk, user_id, guest, send_func):
     if not guest:
         return True
     
-    agreement_given = guest[25] if len(guest) > 25 and guest[25] is not None else 0
+    agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
     
     if agreement_given == 1:
         return True
