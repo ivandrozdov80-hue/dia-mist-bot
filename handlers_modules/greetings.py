@@ -111,6 +111,13 @@ EMOJI_PATTERN = re.compile(
     r'\u2700-\u27BF]'
 )
 
+# Список кнопок меню, которые не должны обрабатываться как смайлики
+MENU_BUTTONS = [
+    '💬 Чат', '⭐ Отзывы', '🔥 Акции', '👤 Профиль',
+    '✅ Визит', '🎁 Розыгрыш', '🤵 Мастер/Бронь',
+    '❓ Помощь', '📊 Админ-меню', '🔙 Назад',
+    '✅ Участвую', '✅ Вы уже участвуете'
+]
 
 def handle_greeting(user_id, message, send_func):
     """
@@ -136,6 +143,7 @@ def handle_greeting(user_id, message, send_func):
 def handle_emoji_short(user_id, message, send_func):
     """
     Обрабатывает короткие сообщения с эмодзи.
+    Игнорирует тексты кнопок меню, чтобы они не перехватывались.
     
     Args:
         user_id (int): ID пользователя
@@ -145,6 +153,10 @@ def handle_emoji_short(user_id, message, send_func):
     Returns:
         bool: True если сообщение было обработано, иначе False
     """
+    # Если сообщение является кнопкой меню, пропускаем
+    if message in MENU_BUTTONS:
+        return False
+
     if len(message) <= 5 and not message.startswith('/') and not message.startswith('?'):
         if EMOJI_PATTERN.search(message):
             emoji_responses = [
