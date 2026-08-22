@@ -172,7 +172,7 @@ def get_agreement_keyboard():
 def _complete_registration(user_id, send_func):
     """Внутренняя функция для завершения регистрации: начисляет бонусы и показывает меню."""
     guest = db.get_guest(user_id)
-    current_visits = int(guest[5]) if guest[5] is not None else 0
+    current_visits = int(db.get_guest_column_value(guest, 'visits')) if guest else 0
     
     if current_visits == 0:
         new_visits = 1
@@ -215,13 +215,13 @@ def handle_registration_step(vk, user_id, guest, message, send_func):
     - reg_step == 0 или 1: запрос телефона
     - reg_step == 2: запрос даты рождения
     """
-    reg_step_raw = guest[9] if len(guest) > 9 else 0
+    reg_step_raw = db.get_guest_column_value(guest, 'registration_step') if guest else 0
     try:
         reg_step = int(reg_step_raw) if reg_step_raw is not None else 0
     except (ValueError, TypeError):
         reg_step = 0
 
-    phone = guest[2] if len(guest) > 2 else ''
+    phone = db.get_guest_column_value(guest, 'phone') if guest else ''
     
     logger.info(f"📝 handle_registration_step: user={user_id}, reg_step={reg_step}, phone={phone}, message={message}")
     
@@ -342,12 +342,12 @@ def ensure_agreement(vk, user_id, guest, send_func):
     if not guest:
         return True
     
-    agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
+    agreement_given = db.get_guest_column_value(guest, 'agreement_given') if guest else 0
     
     if agreement_given == 1:
         return True
     
-    has_phone = guest[2] is not None and guest[2] != ''
+    has_phone = db.get_guest_column_value(guest, 'phone') if guest else ''
     if has_phone:
         send_func(user_id, AGREEMENT_TEXT_OLD, keyboard=get_agreement_keyboard())
     else:

@@ -85,8 +85,8 @@ class Database:
             try:
                 raffle_columns = [row[1] for row in self.cursor.execute("PRAGMA table_info(raffles)").fetchall()]
                 if 'raffle_id' not in raffle_columns:
-                    logger.info("🔄 Обнаружена старая таблица raffles. Пересоздаю...")
-                    self.cursor.execute("ALTER TABLE raffles RENAME TO raffles_old")
+                    logger.info("🔄 Обнаружена старая таблица raffles. Полностью пересоздаю...")
+                    self.cursor.execute("DROP TABLE IF EXISTS raffles")
                     self.cursor.execute("""
                         CREATE TABLE raffles (
                             raffle_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,10 +96,16 @@ class Database:
                             created_at TEXT DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
-                    self.cursor.execute("INSERT INTO raffles (raffle_id, prize, status, winner_id, created_at) SELECT * FROM raffles_old")
-                    self.cursor.execute("DROP TABLE raffles_old")
+                    self.cursor.execute("DROP TABLE IF EXISTS raffle_participants")  # пересоздаём и связанную таблицу
+                    self.cursor.execute("""
+                        CREATE TABLE raffle_participants (
+                            raffle_id INTEGER,
+                            vk_id INTEGER,
+                            PRIMARY KEY (raffle_id, vk_id)
+                        )
+                    """)
                     self.conn.commit()
-                    logger.info("✅ Таблица raffles успешно мигрирована!")
+                    logger.info("✅ Таблица raffles успешно пересоздана!")
             except Exception as e:
                 logger.error(f"Ошибка миграции raffles: {e}")
                 
@@ -165,7 +171,7 @@ class Database:
         guest = self.get_guest(vk_id)
         if not guest:
             return False
-        free_available = guest[13] if len(guest) > 13 else 0
+        free_available = self.get_guest_column_value(guest, 'free_visit_available')
         if free_available == 1:
             self.update_guest(vk_id, free_visit_available=0, visits_in_cycle=0)
             return True
@@ -175,7 +181,7 @@ class Database:
         guest = self.get_guest(vk_id)
         if not guest:
             return False
-        visits_in_cycle = guest[12] if len(guest) > 12 else 0
+        visits_in_cycle = self.get_guest_column_value(guest, 'visits_in_cycle')
         new_visits_in_cycle = visits_in_cycle + 1
         if new_visits_in_cycle >= FREE_HOOKAH_VISITS:
             self.update_guest(vk_id, visits_in_cycle=0, free_visit_available=1)
@@ -188,7 +194,19 @@ class Database:
         guest = self.get_guest(vk_id)
         if not guest:
             return (0, 0)
-        return (guest[12] if len(guest) > 12 else 0, guest[13] if len(guest) > 13 else 0)
+        return (self.get_guest_column_value(guest, 'visits_in_cycle'), self.get_guest_column_value(guest, 'free_visit_available'))
+
+    def get_guest_column_value(self, guest, column_name):
+        """Возвращает значение колонки по имени, ища его в кортеже гостя."""
+        try:
+            # Получаем список колонок из таблицы
+            cols = [row[1] for row in self.cursor.execute("PRAGMA table_info(guests)").fetchall()]
+            if column_name in cols:
+                idx = cols.index(column_name)
+                return guest[idx] if idx < len(guest) else 0
+        except Exception as e:
+            logger.error(f"Ошибка получения колонки {column_name}: {e}")
+        return 0
 
     # ==================== КОДЫ ВИЗИТОВ ====================
     def add_code(self, code, vk_id):
@@ -217,7 +235,7 @@ class Database:
         guest = self.get_guest(vk_id)
         if not guest:
             return False
-        return guest[20] == 1 if len(guest) > 20 else False
+        return self.get_guest_column_value(guest, 'awaiting_review') == 1
 
     # ==================== РОЗЫГРЫШИ ====================
     def create_raffle(self, prize=None):

@@ -139,12 +139,11 @@ def run_bot():
                         # ============================================================
                         guest = db.get_guest(user_id)
                         
-                        # Индексы колонок в БД: 
-                        # 2 - phone, 3 - birth, 9 - registration_step, 14 - agreement_given (правильно!)
-                        agreement_given = guest[14] if len(guest) > 14 and guest[14] is not None else 0
-                        has_phone = guest[2] is not None and guest[2] != ''
-                        has_birth = guest[3] is not None and guest[3] != ''
-                        reg_step = guest[9] if len(guest) > 9 and guest[9] is not None else 0
+                        # Динамически получаем значения колонок, чтобы не зависеть от индексов
+                        agreement_given = db.get_guest_column_value(guest, 'agreement_given')
+                        has_phone = bool(db.get_guest_column_value(guest, 'phone'))
+                        has_birth = bool(db.get_guest_column_value(guest, 'birth'))
+                        reg_step = db.get_guest_column_value(guest, 'registration_step')
 
                         logger.info(f"📊 Статус: user={user_id}, agreement={agreement_given}, phone={has_phone}, birth={has_birth}, reg_step={reg_step}")
 
@@ -154,11 +153,7 @@ def run_bot():
                         if message.lower().startswith('/birth '):
                             birth = message[7:].strip()
                             if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', birth):
-                                db.cursor.execute(
-                                    "UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?",
-                                    (birth, user_id)
-                                )
-                                db.conn.commit()
+                                db.update_guest(user_id, birth=birth, registration_step=3)
                                 gs.update_guest_sheet(user_id, birth=birth, registration_step=3)
                                 guest = db.get_guest(user_id)
                                 send_func(
@@ -189,12 +184,11 @@ def run_bot():
                         # ============================================================
                         if message == '✅ Принимаю':
                             logger.info(f"✅ Гость {user_id} принял согласие")
-                            db.cursor.execute("UPDATE guests SET agreement_given = 1 WHERE vk_id = ?", (user_id,))
-                            db.conn.commit()
+                            db.update_guest(user_id, agreement_given=1)
                             gs.update_guest_sheet(user_id, agreement_given=1)
                             guest = db.get_guest(user_id)
                             
-                            if not guest[2]:
+                            if not db.get_guest_column_value(guest, 'phone'):
                                 phone_text = random.choice(PHONE_REQUEST_MESSAGES)
                                 send_func(user_id, phone_text, keyboard=None)
                             else:
@@ -269,8 +263,7 @@ def run_bot():
                         if reg_step == 2 and has_phone and not has_birth:
                             if re.match(r'^\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})$', message):
                                 birth = message
-                                db.cursor.execute("UPDATE guests SET birth=?, registration_step=3 WHERE vk_id=?", (birth, user_id))
-                                db.conn.commit()
+                                db.update_guest(user_id, birth=birth, registration_step=3)
                                 gs.update_guest_sheet(user_id, birth=birth, registration_step=3)
                                 guest = db.get_guest(user_id)
                                 
@@ -286,8 +279,7 @@ def run_bot():
                                 )
                                 continue
                             elif message.lower() in ('пропустить', 'skip', 'нет'):
-                                db.cursor.execute("UPDATE guests SET registration_step=3 WHERE vk_id=?", (user_id,))
-                                db.conn.commit()
+                                db.update_guest(user_id, registration_step=3)
                                 gs.update_guest_sheet(user_id, registration_step=3)
                                 guest = db.get_guest(user_id)
                                 
