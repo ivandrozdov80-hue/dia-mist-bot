@@ -31,7 +31,7 @@ def get_main_keyboard(user_id=None):
     keyboard.add_button('🎁 Розыгрыш', color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     
-    # Ряд 3: Отзывы, Создатель, Помощь
+    # Ряд 3: Отзывы, Чат, Помощь
     keyboard.add_button('⭐ Отзывы', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('💬 Чат', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('❓ Помощь', color=VkKeyboardColor.SECONDARY)
