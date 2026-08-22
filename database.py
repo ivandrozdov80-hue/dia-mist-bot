@@ -2,7 +2,8 @@
 import sqlite3
 from datetime import datetime
 import logging
-from config import FREE_HOOKAH_VISITS
+from config import FREE_HOOKAH_VISITS, PRIZES  # добавлен импорт PRIZES
+import random  # добавлен импорт random
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,7 @@ class Database:
     # ==================== РОЗЫГРЫШИ ====================
     def create_raffle(self, prize=None):
         if not prize:
-            prize = "Приз"
+            prize = random.choice(PRIZES)  # выбираем случайный из списка
         with self.conn:
             self.cursor.execute("""
                 INSERT INTO raffles (prize, status, created_at)
