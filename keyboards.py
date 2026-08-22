@@ -33,7 +33,7 @@ def get_main_keyboard(user_id=None):
     
     # Ряд 3: Отзывы, Создатель, Помощь
     keyboard.add_button('⭐ Отзывы', color=VkKeyboardColor.SECONDARY)
-    keyboard.add_button('✍️ Создатель', color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button('💬 Чат', color=VkKeyboardColor.SECONDARY)
     keyboard.add_button('❓ Помощь', color=VkKeyboardColor.SECONDARY)
     
     # Ряд 4 (только для администраторов)
