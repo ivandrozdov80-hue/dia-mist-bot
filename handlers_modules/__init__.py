@@ -29,7 +29,7 @@ from .visits import (
 )
 from .promo import handle_promo
 from .raffle import handle_raffle_info, handle_raffle_participate
-from .reviews import handle_review_response
+from .reviews import send_funny_review_prompt, get_review_links_text
 from .greetings import handle_greeting, handle_emoji_short, handle_random_joke, handle_sticker
 from .help import handle_help
 from .utils import update_command_count, update_raffle_participation

@@ -35,7 +35,7 @@ from handlers_modules.greetings import handle_greeting, handle_emoji_short, hand
 from handlers_modules.promo import handle_promo
 from handlers_modules.help import handle_help
 from handlers_modules.utils import update_command_count, update_raffle_participation
-
+# Убрали ошибочный импорт handle_review_response
 
 
 def send_message(vk, user_id, text, attachment=None, keyboard=None):
@@ -62,7 +62,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     if handle_emoji_short(user_id, message, send_func):
         return True
 
-
+    # ===== ОТЗЫВЫ (больше не обрабатываем как кнопку, она в меню) =====
 
     # ============================================================
     # АДМИН-МЕНЮ (кнопка)
@@ -132,7 +132,6 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     # ============================================================
     if user_id in ADMIN_IDS and message.isdigit():
         # Проверяем, не ожидает ли админ удаление
-        # (грубо, но просто: если админ написал цифру, пробуем удалить)
         target_id = int(message)
         result_text = f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🗑️ ГОСТЬ УДАЛЁН\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         guest = db.get_guest(target_id)
