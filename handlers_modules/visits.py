@@ -1,32 +1,28 @@
 # handlers_modules/visits.py
-"""
-Модуль для обработки визитов гостей.
-Включает запросы, подтверждение, отклонение и ручной ввод кода.
-"""
 import re
+import logging
 from datetime import datetime
 import database as db
 import google_sheets as gs
 import keyboards as kb
 import utils
-from config import ADMIN_IDS, logger, VISIT_REQUEST_COOLDOWN
+from config import ADMIN_IDS, VISIT_REQUEST_COOLDOWN, logger
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from .utils import update_command_count
 from .reviews import ask_review
 
 
-def _send_visit_report(user_id, result, send_func, is_admin=False):
+def _send_visit_report(user_id, result, send_func):
     """
-    Внутренняя функция для отправки отчёта о визите.
-    
-    Args:
-        user_id (int): ID гостя
-        result (tuple): Результат от apply_visit()
-        send_func (callable): Функция отправки сообщения
-        is_admin (bool): Если True, отправляется администратору
+    Отправляет отчёт о визите гостю.
+    result - кортеж (new_visits, new_level, level_name, promo_line, reached_six, free_used)
     """
+    if not result:
+        logger.error(f"Нет результата для отчёта гостю {user_id}")
+        return
+
     new_visits, new_level, level_name, _, promo_line, reached_six, free_used = result
-    
+
     if free_used:
         report = (
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -55,8 +51,12 @@ def _send_visit_report(user_id, result, send_func, is_admin=False):
                 "Ты накопил на бесплатный кальян!\n"
                 "Следующий визит за наш счёт!"
             )
-    
-    send_func(user_id, report, keyboard=kb.get_main_keyboard())
+
+    try:
+        send_func(user_id, report, keyboard=kb.get_main_keyboard())
+        logger.info(f"✅ Отчёт о визите отправлен гостю {user_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки отчёта гостю {user_id}: {e}")
 
 
 def handle_visit_button(vk, user_id, guest, send_func):
@@ -78,8 +78,7 @@ def handle_visit_request(vk, user_id, guest, message, send_func):
     """Обработка заявки на визит от гостя."""
     update_command_count(user_id, 'button_visit')
     now = datetime.now()
-    
-    # Проверяем, зарегистрирован ли гость
+
     reg_step = guest[9] if len(guest) > 9 else 0
     if reg_step < 3:
         send_func(
@@ -88,8 +87,7 @@ def handle_visit_request(vk, user_id, guest, message, send_func):
             keyboard=kb.get_main_keyboard()
         )
         return True
-    
-    # Проверяем кулдаун
+
     last_request = db.get_last_request_time(user_id)
     if last_request:
         try:
@@ -104,10 +102,9 @@ def handle_visit_request(vk, user_id, guest, message, send_func):
                 return True
         except Exception:
             pass
-    
+
     db.update_last_request_time(user_id)
-    
-    # Отправляем уведомление администраторам
+
     for admin_id in ADMIN_IDS:
         keyboard = VkKeyboard(one_time=True)
         keyboard.add_button(f'✅ Подтвердить {user_id}', color=VkKeyboardColor.POSITIVE)
@@ -120,7 +117,7 @@ def handle_visit_request(vk, user_id, guest, message, send_func):
             f"Нажмите «Подтвердить», чтобы засчитать визит.",
             keyboard=keyboard
         )
-    
+
     send_func(
         user_id,
         "✅ Заявка отправлена администратору. Ожидайте подтверждения.",
@@ -132,28 +129,27 @@ def handle_visit_request(vk, user_id, guest, message, send_func):
 def handle_visit_manual(vk, user_id, guest, message, send_func):
     """Обработка ручного ввода кода визита (/visit КОД)."""
     update_command_count(user_id, 'visit_manual')
-    
+
     parts = message.split()
     if len(parts) != 2:
         send_func(user_id, "❌ Напиши: /visit КОД", keyboard=kb.get_main_keyboard())
         return True
-    
+
     code_str = parts[1]
     if not code_str.isdigit():
         send_func(user_id, "❌ Код – только цифры", keyboard=kb.get_main_keyboard())
         return True
-    
+
     code = int(code_str)
     result = utils.apply_visit(user_id, code, send_func)
-    
+
     if result:
         _send_visit_report(user_id, result, send_func)
-        # Предложить отзыв
         db.set_awaiting_review(user_id, True)
         ask_review(vk, user_id, send_func)
     else:
         send_func(user_id, "❌ Ошибка при засчитывании визита.", keyboard=kb.get_main_keyboard())
-    
+
     return True
 
 
@@ -162,17 +158,21 @@ def handle_admin_confirm(vk, user_id, message, send_func):
     if user_id not in ADMIN_IDS:
         send_func(user_id, "⛔ Только для администраторов.")
         return True
-    
+
     match = re.search(r'\d+', message)
     if not match:
         send_func(user_id, "Ошибка: не могу определить гостя.")
         return True
-    
+
     target_id = int(match.group())
+    logger.info(f"Админ {user_id} подтверждает визит для гостя {target_id}")
+
     result = utils.apply_visit(target_id, send_message_func=send_func)
-    
+
     if result:
+        # Отправляем отчёт гостю
         _send_visit_report(target_id, result, send_func)
+        # Отправляем подтверждение админу
         send_func(
             user_id,
             f"✅ Визит для гостя {target_id} подтверждён.",
@@ -187,7 +187,8 @@ def handle_admin_confirm(vk, user_id, message, send_func):
             "❌ Не удалось засчитать визит. Проверьте, что гость существует.",
             keyboard=kb.get_main_keyboard()
         )
-    
+        logger.error(f"Не удалось применить визит для гостя {target_id}")
+
     return True
 
 
@@ -196,14 +197,14 @@ def handle_admin_reject(vk, user_id, message, send_func):
     if user_id not in ADMIN_IDS:
         send_func(user_id, "⛔ Только для администраторов.")
         return True
-    
+
     match = re.search(r'\d+', message)
     if not match:
         send_func(user_id, "Ошибка: не могу определить гостя.")
         return True
-    
+
     target_id = int(match.group())
-    
+
     send_func(
         target_id,
         "❌ Ваш визит не подтверждён. Если вы в заведении, обратитесь к администратору.",
@@ -214,5 +215,5 @@ def handle_admin_reject(vk, user_id, message, send_func):
         f"❌ Заявка для гостя {target_id} отклонена.",
         keyboard=kb.get_main_keyboard()
     )
-    
+
     return True

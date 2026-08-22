@@ -1,7 +1,4 @@
 # handlers_modules/utils.py
-"""
-Утилиты для обновления статистики пользователей.
-"""
 import json
 import database as db
 from config import logger

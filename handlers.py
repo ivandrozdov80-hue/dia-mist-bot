@@ -54,8 +54,6 @@ def send_message(vk, user_id, text, attachment=None, keyboard=None):
 def handle_main_menu(vk, user_id, guest, message, send_func):
     low_msg = message.lower()
 
-    logger.info(f"🔍 handle_main_menu: user={user_id}, message='{message}'")
-
     # ===== ПРИВЕТСТВИЯ =====
     if handle_greeting(user_id, message, send_func):
         return True
@@ -87,11 +85,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
 
     # ===== КНОПКА "НАЗАД" (из админ-меню) =====
     if message == '🔙 Назад' and user_id in ADMIN_IDS:
-        send_func(
-            user_id,
-            "Главное меню:",
-            keyboard=kb.get_main_keyboard(user_id)
-        )
+        send_func(user_id, "Главное меню:", keyboard=kb.get_main_keyboard(user_id))
         return True
 
     # ===== РАССЫЛКА (кнопка) =====
