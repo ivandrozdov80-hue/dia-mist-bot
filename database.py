@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 class Database:
     def __init__(self, db_path="bot_data.db"):
         self.db_path = db_path
-        # Проверяем, не передан ли уже объект подключения (для глобального использования)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
@@ -66,7 +65,24 @@ class Database:
                     PRIMARY KEY (raffle_id, vk_id)
                 )
             """)
-        logger.info("✅ База данных инициализирована")
+        self._migrate()
+
+    def _migrate(self):
+        """Автоматически добавляет недостающие колонки в существующую таблицу."""
+        try:
+            columns = [row[1] for row in self.cursor.execute("PRAGMA table_info(guests)").fetchall()]
+            if 'agreement_given' not in columns:
+                self.cursor.execute("ALTER TABLE guests ADD COLUMN agreement_given INTEGER DEFAULT 0")
+                logger.info("✅ Добавлена колонка agreement_given")
+            if 'awaiting_review' not in columns:
+                self.cursor.execute("ALTER TABLE guests ADD COLUMN awaiting_review INTEGER DEFAULT 0")
+                logger.info("✅ Добавлена колонка awaiting_review")
+            if 'last_request_time' not in columns:
+                self.cursor.execute("ALTER TABLE guests ADD COLUMN last_request_time TEXT")
+                logger.info("✅ Добавлена колонка last_request_time")
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Ошибка миграции: {e}")
 
     # ==================== ГОСТИ ====================
     def add_guest(self, vk_id, name):
@@ -316,13 +332,9 @@ def finish_raffle(raffle_id, winner_id):
     db = Database()
     return db.finish_raffle(raffle_id, winner_id)
 
-
 # ============================================================
 # ГЛОБАЛЬНЫЙ ИНСТАНС ДЛЯ СОВМЕСТИМОСТИ С main.py (db.conn, db.cursor)
 # ============================================================
-# Создаем один общий объект базы данных, чтобы main.py мог делать:
-# db.cursor.execute(...) и db.conn.commit()
-# Это 100% решает ошибку "module 'database' has no attribute 'cursor'"
 _global_db = Database()
 conn = _global_db.conn
 cursor = _global_db.cursor
