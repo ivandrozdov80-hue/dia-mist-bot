@@ -135,11 +135,30 @@ def run_bot():
                         gs.ensure_guest_in_sheet(user_id, guest)
 
                         # ============================================================
-                        # 4. ПОЛУЧАЕМ СВЕЖИЕ ДАННЫЕ ГОСТЯ
+                        # 4. ПОЛУЧАЕМ СВЕЖИЕ ДАННЫЕ ГОСТЯ И СИНХРОНИЗИРУЕМ С GOOGLE SHEETS
                         # ============================================================
                         guest = db.get_guest(user_id)
                         
-                        # Динамически получаем значения колонок
+                        # === СИНХРОНИЗАЦИЯ С GOOGLE SHEETS ===
+                        sheet_data = gs.get_guest_data_from_sheet(user_id)
+                        if sheet_data:
+                            # Если в Google Sheets есть телефон, а в SQLite нет — обновляем
+                            if not db.get_guest_column_value(guest, 'phone') and sheet_data['phone']:
+                                db.update_guest(user_id, phone=sheet_data['phone'])
+                                logger.info(f"🔄 Синхронизирован телефон из Google Sheets для {user_id}")
+                            
+                            # Если в Google Sheets есть дата рождения, а в SQLite нет — обновляем
+                            if not db.get_guest_column_value(guest, 'birth') and sheet_data['birth']:
+                                db.update_guest(user_id, birth=sheet_data['birth'])
+                                logger.info(f"🔄 Синхронизирована дата рождения из Google Sheets для {user_id}")
+                            
+                            # Если в Google Sheets согласие = 1, а в SQLite 0 — обновляем
+                            if db.get_guest_column_value(guest, 'agreement_given') == 0 and sheet_data['agreement'] == 1:
+                                db.update_guest(user_id, agreement_given=1)
+                                logger.info(f"🔄 Синхронизировано согласие из Google Sheets для {user_id}")
+                        
+                        # === После синхронизации снова получаем свежие данные ===
+                        guest = db.get_guest(user_id)
                         agreement_given = db.get_guest_column_value(guest, 'agreement_given')
                         has_phone = bool(db.get_guest_column_value(guest, 'phone'))
                         has_birth = bool(db.get_guest_column_value(guest, 'birth'))

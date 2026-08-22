@@ -213,7 +213,7 @@ def ensure_guest_in_sheet(vk_id, guest_data):
         logger.error(f"⚠️ Ошибка при проверке/восстановлении гостя: {e}")
 
 # ============================================================
-# УДАЛЕНИЕ ГОСТЯ (ДОБАВЛЕНО)
+# УДАЛЕНИЕ ГОСТЯ
 # ============================================================
 def delete_guest_by_id(vk_id):
     """
@@ -238,7 +238,7 @@ def delete_guest_by_id(vk_id):
         return False
 
 # ============================================================
-# ОЧИСТКА КЭША (ДОБАВЛЕНО)
+# ОЧИСТКА КЭША
 # ============================================================
 def clear_system_cache():
     """
@@ -262,7 +262,7 @@ def clear_system_cache():
         return False
 
 # ============================================================
-# ВОССТАНОВЛЕНИЕ ГОСТЕЙ (ДОБАВЛЕНО)
+# ВОССТАНОВЛЕНИЕ ГОСТЕЙ
 # ============================================================
 def restore_all_guests_from_db():
     """
@@ -289,3 +289,30 @@ def restore_all_guests_from_db():
     except Exception as e:
         logger.error(f"❌ Ошибка восстановления: {e}")
         return 0
+
+# ============================================================
+# НОВАЯ ФУНКЦИЯ: ПОЛУЧЕНИЕ ДАННЫХ ГОСТЯ ИЗ GOOGLE SHEETS
+# ============================================================
+def get_guest_data_from_sheet(vk_id):
+    """
+    Возвращает данные гостя из Google Sheets: телефон, дату рождения, согласие.
+    """
+    try:
+        row_num = find_row_by_vk(vk_id)
+        if row_num is None:
+            return None
+        
+        sheet = _get_sheet()
+        # Колонки: 3 - phone (C), 4 - birth (D), 15 - agreement_given (O)
+        phone = sheet.cell(row_num, 3).value
+        birth = sheet.cell(row_num, 4).value
+        agreement = sheet.cell(row_num, 15).value
+        
+        return {
+            'phone': phone if phone else '',
+            'birth': birth if birth else '',
+            'agreement': int(agreement) if agreement else 0
+        }
+    except Exception as e:
+        logger.error(f"Ошибка получения данных из Google Sheets: {e}")
+        return None
