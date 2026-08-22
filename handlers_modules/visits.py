@@ -9,7 +9,7 @@ import utils
 from config import ADMIN_IDS, VISIT_REQUEST_COOLDOWN, logger
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from .utils import update_command_count
-from .reviews import ask_review
+from .reviews import send_funny_review_prompt
 
 
 def _send_visit_report(user_id, result, send_func):
@@ -21,7 +21,6 @@ def _send_visit_report(user_id, result, send_func):
         logger.error(f"Нет результата для отчёта гостю {user_id}")
         return
 
-    # Исправлено: убрал 4-й элемент (пустой)
     new_visits, new_level, level_name, promo_line, reached_six, free_used = result
 
     if free_used:
@@ -146,8 +145,8 @@ def handle_visit_manual(vk, user_id, guest, message, send_func):
 
     if result:
         _send_visit_report(user_id, result, send_func)
-        db.set_awaiting_review(user_id, True)
-        ask_review(vk, user_id, send_func)
+        # Вместо кнопок отправляем шуточное сообщение с основным меню
+        send_funny_review_prompt(user_id, send_func)
     else:
         send_func(user_id, "❌ Ошибка при засчитывании визита.", keyboard=kb.get_main_keyboard())
 
@@ -179,9 +178,8 @@ def handle_admin_confirm(vk, user_id, message, send_func):
             f"✅ Визит для гостя {target_id} подтверждён.",
             keyboard=kb.get_main_keyboard()
         )
-        # Предложить отзыв
-        db.set_awaiting_review(target_id, True)
-        ask_review(vk, target_id, send_func)
+        # Вместо кнопок отправляем шуточное сообщение с основным меню
+        send_funny_review_prompt(target_id, send_func)
     else:
         send_func(
             user_id,

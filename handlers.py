@@ -35,7 +35,7 @@ from handlers_modules.greetings import handle_greeting, handle_emoji_short, hand
 from handlers_modules.promo import handle_promo
 from handlers_modules.help import handle_help
 from handlers_modules.utils import update_command_count, update_raffle_participation
-from handlers_modules.reviews import handle_review_response
+
 
 
 def send_message(vk, user_id, text, attachment=None, keyboard=None):
@@ -62,9 +62,7 @@ def handle_main_menu(vk, user_id, guest, message, send_func):
     if handle_emoji_short(user_id, message, send_func):
         return True
 
-    # ===== ОТЗЫВЫ =====
-    if handle_review_response(vk, user_id, guest, message, send_func):
-        return True
+
 
     # ============================================================
     # АДМИН-МЕНЮ (кнопка)
