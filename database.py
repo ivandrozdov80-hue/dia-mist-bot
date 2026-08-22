@@ -373,6 +373,13 @@ def finish_raffle(raffle_id, winner_id):
     db = Database()
     return db.finish_raffle(raffle_id, winner_id)
 
+def get_guest_column_value(guest, column_name):
+    """
+    Возвращает значение колонки по имени для гостя (кортежа).
+    Использует глобальный экземпляр базы данных.
+    """
+    return _global_db.get_guest_column_value(guest, column_name)
+
 # ============================================================
 # ГЛОБАЛЬНЫЙ ИНСТАНС ДЛЯ СОВМЕСТИМОСТИ С main.py (db.conn, db.cursor)
 # ============================================================
